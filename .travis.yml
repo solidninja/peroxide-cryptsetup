@@ -10,3 +10,7 @@ addons:
   apt:
     packages:
       - libcryptsetup-dev
+sudo: required
+dist: trusty
+os:
+    - linux
