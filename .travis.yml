@@ -13,9 +13,10 @@ os:
 install:
   - sudo apt-get update
   - sudo apt-get install libcryptsetup-dev
+  - which cargo
 script:
   - cargo build --verbose
-  - sudo -E cargo test --verbose
+  - sudo -E /usr/local/bin/cargo test --verbose
 # addons:
 #   apt:
 #     packages:
