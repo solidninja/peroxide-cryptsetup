@@ -6,11 +6,14 @@ rust:
 matrix:
   allow_failures:
     - rust: nightly 
-addons:
-  apt:
-    packages:
-      - libcryptsetup-dev
 sudo: required
 dist: trusty
 os:
-    - linux
+  - linux
+install:
+  - sudo apt-get install libcryptsetup-dev
+
+# addons:
+#   apt:
+#     packages:
+#       - libcryptsetup-dev
