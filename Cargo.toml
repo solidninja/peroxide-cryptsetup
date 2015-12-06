@@ -1,0 +1,48 @@
+[package]
+name = "peroxide-cryptsetup"
+version = "0.1.0"
+authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
+build = "build.rs"
+
+[build-dependencies]
+syntex = "*"
+serde_codegen = { version = "*", features = ["with-syntex"] }
+
+[dependencies]
+docopt = "*"
+rustc-serialize = "*"
+serde = "*"
+serde_json = "*"
+uuid = "*"
+errno = "*"
+
+# TODO - decide on what logger to use :)
+log = "*"
+env_logger = "*"
+termios = "*"
+libc = "*"
+
+[dependencies.cryptsetup-rs]
+version = "0.1.0"
+path = "lib/cryptsetup-rs"
+
+[dev-dependencies]
+tempfile = "*"
+tempdir = "*"
+env_logger = "*"
+expectest = "*"
+
+[lib]
+name = "peroxide_cryptsetup"
+path = "src/lib/lib.rs"
+
+[[bin]]
+name = "peroxs"
+test = false
+doc = false
+
+[profile.dev]
+codegen-units = 4
+
+[profile.test]
+codegen-units = 4

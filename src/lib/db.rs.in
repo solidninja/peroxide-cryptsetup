@@ -1,0 +1,77 @@
+use std::path;
+use uuid::Uuid;
+use std::option::Option;
+
+#[derive(RustcDecodable, Serialize, Deserialize, Debug, Clone)]
+pub enum DbType {
+	Operation,
+	Backup,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PeroxideDb {
+	pub entries: Vec<DbEntry>,
+	pub db_type: DbType,
+	pub version: u16,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum DbEntryType {
+	Keyfile,
+	Passphrase,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub enum DbEntry {
+	KeyfileEntry { key_file: path::PathBuf, volume_id: VolumeId },
+	PassphraseEntry { volume_id: VolumeId },
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct VolumeId {
+	pub name: Option<String>,
+	pub id: VolumeUuid
+}
+
+impl VolumeId {
+	pub fn new(name: Option<String>, uuid: Uuid) -> VolumeId {
+		VolumeId { name: name, id: VolumeUuid { uuid: uuid } }
+	}
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct VolumeUuid {
+	pub uuid: Uuid
+}
+
+mod imp {
+	use serde;
+	use uuid::Uuid;
+	use ::db::VolumeUuid;
+
+	impl serde::Serialize for VolumeUuid {
+		fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> where S: serde::Serializer {
+			serializer.visit_str(&self.uuid.to_hyphenated_string())
+		}
+	} 
+
+	impl serde::Deserialize for VolumeUuid {
+		fn deserialize<D>(deserializer: &mut D) -> Result<VolumeUuid, D::Error> where D: serde::Deserializer {
+			deserializer.visit(VolumeUuidVisitor)
+		}
+	}
+
+	struct VolumeUuidVisitor;
+
+	impl serde::de::Visitor for VolumeUuidVisitor {
+		type Value = VolumeUuid;
+
+		fn visit_str<E>(&mut self, value: &str) -> Result<VolumeUuid, E> where E: serde::de::Error {
+			match Uuid::parse_str(value) {
+				Ok(parsed) => Ok(VolumeUuid { uuid: parsed }), 
+				Err(reason) =>  Err(serde::de::Error::syntax(&format!("{}", reason)))
+			}
+		}
+	}
+}

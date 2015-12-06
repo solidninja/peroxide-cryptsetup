@@ -1,0 +1,15 @@
+[package]
+name = "blkid-rs"
+version = "0.1.0"
+authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
+
+[lib]
+name = "blkid_rs"
+
+[dependencies]
+byteorder = "*"
+uuid = "*"
+
+[dev-dependencies]
+env_logger = "*"
+tempdir = "*"

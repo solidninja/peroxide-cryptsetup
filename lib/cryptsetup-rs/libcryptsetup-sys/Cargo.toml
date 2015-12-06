@@ -1,0 +1,17 @@
+[package]
+name = "libcryptsetup-sys"
+version = "0.1.0"
+authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
+links = "cryptsetup"
+build = "build.rs"
+
+[lib]
+name = "libcryptsetup_sys"
+path = "lib.rs"
+
+[dependencies]
+libc = "*"
+
+[build-dependencies]
+pkg-config = "*"
+
