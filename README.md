@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/solidninja/peroxide-cryptsetup.svg?branch=master)](https://travis-ci.org/solidninja/peroxide-cryptsetup)
+[![Build Status](https://travis-ci.org/solidninja/peroxide-cryptsetup.png?branch=master)](https://travis-ci.org/solidninja/peroxide-cryptsetup)
 
 _**peroxide-cryptsetup**_
 
