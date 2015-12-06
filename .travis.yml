@@ -11,6 +11,7 @@ dist: trusty
 os:
   - linux
 install:
+  - sudo apt-get update
   - sudo apt-get install libcryptsetup-dev
 
 # addons:
