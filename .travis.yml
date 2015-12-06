@@ -15,7 +15,7 @@ install:
   - sudo apt-get install libcryptsetup-dev
 script:
   - cargo build --verbose
-  - sudo cargo test --verbose
+  - sudo -E cargo test --verbose
 # addons:
 #   apt:
 #     packages:
