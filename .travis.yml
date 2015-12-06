@@ -14,9 +14,10 @@ install:
   - sudo apt-get update
   - sudo apt-get install libcryptsetup-dev
   - which cargo
+  - /bin/sh -c "echo $PATH"
 script:
   - cargo build --verbose
-  - sudo PATH=/bin:/usr/bin:/sbin:/home/travis/rust/bin cargo test --verbose
+  - sudo /bin/sh -c "PATH=/home/travis/rust/bin:/usr/bin:/bin:/sbin cargo test --verbose"
 # addons:
 #   apt:
 #     packages:
