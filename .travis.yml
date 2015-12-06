@@ -16,7 +16,7 @@ install:
   - which cargo
 script:
   - cargo build --verbose
-  - sudo -E /home/travis/rust/bin/cargo test --verbose
+  - sudo PATH=/bin:/usr/bin:/sbin:/home/travis/rust/bin cargo test --verbose
 # addons:
 #   apt:
 #     packages:
