@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/solidninja/peroxide-cryptsetup.svg)](https://travis-ci.org/solidninja/peroxide-cryptsetup)
+
 _**peroxide-cryptsetup**_
 
 * _(peroxide) a viscous liquid with strong oxidizing properties._
@@ -28,7 +30,7 @@ $ peroxs open /dev/your-disk
 
 ## Roadmap
 
-There's no official roadmap, but have a look in [TASKS.todo] for a list of current tasks.
+There's no official roadmap, but have a look in [TASKS.todo](TASKS.todo) for a list of current tasks.
 
 ## Contributing
 
