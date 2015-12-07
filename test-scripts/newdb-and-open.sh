@@ -3,7 +3,7 @@
 cleanup() {
     if [ -d "$OPDIR" ]; then
         echo "Removing OPDIR $OPDIR"
-        # rm -rf $OPDIR 
+        rm -rf $OPDIR 
     fi
 }
 trap cleanup EXIT
@@ -11,11 +11,7 @@ trap cleanup EXIT
 echo "Starting the newdb-and-open scenario"
 
 export RUST_LOG=peroxide_cryptsetup=debug,cryptsetup_rs=debug
-# export OPDIR=`mktemp -d`
-export OPDIR=/tmp/vlad/tmp.mLPj8PMnk3
-# FIXME temporary
-mkdir -p $OPDIR
-rm -f $OPDIR/peroxs-db.json
+export OPDIR=`mktemp -d`
 
 peroxs="`pwd`/target/debug/peroxs"
 [ ! -f $peroxs ] && echo "ERROR: peroxs not found in $peroxs" && exit 1 
