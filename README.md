@@ -18,14 +18,65 @@ lost. It only supports LUKS devices currently.
 
 Documentation is currently a bit light, but this will get you started:
 
+ * `cargo build`
+ * now `target/debug/peroxs` will be simply referred to as `peroxs`
+
+### Create a `peroxs-db.json` and enroll a keyfile
+
+Pick a block device (disk). We will use `/dev/your-disk` as an example.
+
+ * `cd /secure/key/storage/location`
+ * `peroxs init backup` (create the db)
+ * `peroxs enroll keyfile secret.key /dev/your-disk --name=awesome --iteration-ms=1000`
+
+The above assumes that `/dev/your-disk` has already been `cryptsetup luksFormat`ed. If you need to format
+an entirely new device:
+
+ * `peroxs enroll keyfile secret.key new --cipher aes-xts-plain --hash sha256 --key-bits 256 /dev/your-disk --name=awesome --iteration-ms=1000`
+
+For more information on the values of `--cipher`, `--hash` and `--key-bits` see `man cryptsetup`.
+
+### Open a device that is already enrolled
+
+ * `cd /location/of/peroxs/db`
+ * `peroxs open /dev/your-disk` (alternative, can use uuid of disk)
+
+### Full usage
+
+_verbatim from [peroxs.rs](src/bin/peroxs.rs)_
+
 ```
-$ cargo build                               # This creates the peroxs executable
-$ cd /secure/key/storage/location           # Location for your backup keys
-$ peroxs init backup                        # Creates peroxide-cryptsetup database, a json file called peroxs-db.json
-# Enroll the device
-$ peroxs enroll keyfile secret.key /dev/your-disk --name="awesome" --iteration-ms=1000
-# Open the device
-$ peroxs open /dev/your-disk
+Usage:
+    peroxs enroll (keyfile <keyfile> | passphrase) (new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits>) <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>] 
+    peroxs init <db-type> [at <db>]
+    peroxs open <device-or-uuid>... [--name=<name>] [at <db>]
+    peroxs (--help | --version)
+
+Actions:
+    enroll                                  Enroll a new or existing LUKS disk(s) with a given key type and parameters 
+    init                                    Create a new database of the specified type
+    open                                    Open an existing LUKS disk(s) with parameters from the database
+
+Enrollment types:
+    keyfile                                 An existing key file with randomness inside
+    passphrase                              A password or passphrase
+
+Arguments:
+    <db>                                    The path to the database
+    <db-type>                               The database type (used when creating). One of: operation,backup
+    <device-or-uuid>                        The path to the device or the uuid of the device
+    <keyfile>                               The path to the key file 
+
+Options:
+    --help                                  Show this message
+    --version                               Show the version of peroxs and libraries.
+
+    --backup-db <backup-db>                 The path to the backup database to use (if any)
+    -c <cipher>, --cipher <cipher>          Cipher to use for new LUKS container
+    -i <ms>, --iteration-ms <ms>            Number of milliseconds to wait for the PBKDF2 function iterations
+    -h <hash>, --hash <hash>                Hash function to use for new LUKS container
+    -n <name>, --name <name>                Name for the device being enrolled
+    -s <key-bits>, --key-bits <key-bits>    Number of key bits to use for new LUKS container
 ```
 
 ## Roadmap
