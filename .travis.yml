@@ -10,15 +10,15 @@ sudo: required
 dist: trusty
 os:
   - linux
-install:
-  - sudo apt-get update
-  - sudo apt-get install libcryptsetup-dev
-  - which cargo
-  - /bin/sh -c "env"
+# install:
+# - sudo apt-get update
+#  - sudo apt-get install libcryptsetup-dev
+#  - which cargo
+#  - /bin/sh -c "env"
 script:
   - cargo build --verbose
   - sudo /bin/sh -c "PATH=/home/travis/rust/bin:/usr/bin:/bin:/sbin LD_LIBRARY_PATH=/home/travis/rust/lib cargo test --verbose"
-# addons:
-#   apt:
-#     packages:
-#       - libcryptsetup-dev
+ addons:
+   apt:
+     packages:
+       - libcryptsetup-dev
