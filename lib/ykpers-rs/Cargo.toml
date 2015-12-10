@@ -1,0 +1,26 @@
+[package]
+name = "ykpers-rs"
+version = "0.1.0"
+authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
+license = "LGPL-3.0"
+
+[lib]
+name = "ykpers_rs"
+
+[dependencies]
+libc = "*"
+errno = "*"
+log = "*"
+libykpers-sys = { path = "libykpers-sys", version = "0.1.0" }
+
+[dev-dependencies]
+env_logger = "*"
+tempdir = "*"
+expectest = "*"
+
+# [[test]]
+# name = "tests"
+
+# FIXME remove this
+[[bin]]
+name = "ykpers-tester"
