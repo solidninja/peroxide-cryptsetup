@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
 build = "build.rs"
 
+[features]
+default = ["yubikey"]
+yubikey = ["ykpers-rs"]
+
 [build-dependencies]
 syntex = "*"
 serde_codegen = { version = "*", features = ["with-syntex"] }
@@ -22,9 +26,8 @@ env_logger = "*"
 termios = "*"
 libc = "*"
 
-[dependencies.cryptsetup-rs]
-version = "0.1.0"
-path = "lib/cryptsetup-rs"
+cryptsetup-rs = { version = "0.1.0", path = "lib/cryptsetup-rs" }
+ykpers-rs = { version = "0.1.0", path = "lib/ykpers-rs", optional = true }
 
 [dev-dependencies]
 tempfile = "*"

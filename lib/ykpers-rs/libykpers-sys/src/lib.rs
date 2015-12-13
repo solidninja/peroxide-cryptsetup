@@ -410,17 +410,24 @@ extern "C" {
     pub fn yk_write_device_config(yk: *mut yk_key_st, device_config: *mut yk_device_config_st) -> c_int;
     pub fn yk_write_scan_map(yk: *mut yk_key_st, scan_map: *mut c_uchar) -> c_int;
     pub fn yk_write_to_key(yk: *mut yk_key_st, slot: u8, buf: *const c_void, bufcount: c_int) -> c_int;
-    pub fn yk_challenge_response(yk: *mut yk_key_st, yk_cmd: u8, may_block: c_int, challenge_len: c_uint, challenge: *const c_uchar, response_len: c_uint, response: *mut c_uchar) -> c_int;
+    pub fn yk_challenge_response(yk: *mut yk_key_st,
+                                 yk_cmd: u8,
+                                 may_block: c_int,
+                                 challenge_len: c_uint,
+                                 challenge: *const c_uchar,
+                                 response_len: c_uint,
+                                 response: *mut c_uchar)
+                                 -> c_int;
 
     pub fn yk_force_key_update(yk: *mut yk_key_st) -> c_int;
     pub fn yk_get_key_vid_pid(yk: *mut yk_key_st, vid: *mut c_int, pid: *mut c_int) -> c_int;
     pub fn yk_get_capabilities(yk: *mut yk_key_st, slot: u8, flags: c_uint, capabilities: *mut c_uchar, len: *mut c_uint) -> c_int;
-    
+
     pub fn _yk_errno_location() -> *mut c_int;
     pub fn yk_strerror(errno: c_int) -> *const c_char;
     pub fn yk_usb_strerror() -> *const c_char;
 
-    // ignore yk_endian_swap_16
+// ignore yk_endian_swap_16
 }
 
 pub fn yk_errno() -> c_int {
@@ -448,4 +455,3 @@ pub enum YK_ERR {
 
 pub const YK_FLAG_MAYBLOCK: i32 = 0x01 << 16;
 pub const YK_CRC_OK_RESIDUAL: i32 = 0xf0b8;
-

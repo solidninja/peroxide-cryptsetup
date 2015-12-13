@@ -8,7 +8,7 @@ use std::time::Duration;
 use uuid;
 
 use io::{KeyWrapper, FileExtensions, Disks, TerminalPrompt};
-use model::{DbLocation, PeroxideDb};
+use model::{DbLocation, PeroxideDb, YubikeySlot, YubikeyEntryType};
 use cryptsetup_rs::device::CryptDevice;
 
 pub type Result<T> = result::Result<T, Error>;
@@ -29,6 +29,10 @@ pub enum Error {
         path: Option<PathBuf>,
         cause: io::Error,
     },
+    YubikeyError {
+        message: String,
+    },
+    FeatureNotAvailable,
 }
 
 pub trait HasDbLocation {
@@ -41,6 +45,10 @@ pub trait KeyfileInput: Sized {
 
 pub trait PasswordInput: Sized {
     fn read_password(&self, prompt: &str) -> Result<KeyWrapper>;
+}
+
+pub trait YubikeyInput: PasswordInput {
+    fn read_yubikey(&self, name: Option<&str>, slot: YubikeySlot, entry_type: YubikeyEntryType) -> Result<KeyWrapper>;
 }
 
 pub trait DiskSelector {
@@ -97,6 +105,14 @@ impl PasswordInput for MainContext {
     }
 }
 
+#[cfg(not(feature = "yubikey"))]
+impl YubikeyInput for MainContext {
+    #[allow(unused)]
+    fn read_yubikey(&self, name: Option<&str>, slot: YubikeySlot, entry_type: YubikeyEntryType) -> Result<KeyWrapper> {
+        Err(Error::FeatureNotAvailable)
+    }
+}
+
 impl DiskSelector for MainContext {
     fn all_disk_uuids(&self) -> Result<Vec<uuid::Uuid>> {
         Disks::all_disk_uuids().map_err(|err| {
@@ -145,7 +161,7 @@ impl PeroxideDbWriter for MainContext {
 
 pub trait ReaderContext: HasDbLocation + PeroxideDbReader {}
 pub trait WriterContext: ReaderContext + PeroxideDbWriter { }
-pub trait InputContext: KeyfileInput + PasswordInput { }
+pub trait InputContext: KeyfileInput + PasswordInput + YubikeyInput {}
 
 impl ReaderContext for MainContext {}
 impl WriterContext for MainContext {}

@@ -1,4 +1,5 @@
 extern crate libykpers_sys;
+extern crate libc;
 
 use std::sync::{Once, ONCE_INIT};
 use std::sync::atomic::{AtomicIsize, ATOMIC_ISIZE_INIT, Ordering};
@@ -8,11 +9,21 @@ use libykpers_sys as ffi;
 
 static FFI_INIT: Once = ONCE_INIT;
 static FFI_INIT_RESULT: AtomicIsize = ATOMIC_ISIZE_INIT;
+static MIN_VERSION_CHAL_RESP: Version = (2, 2, 0);
 
 pub type Result<T> = result::Result<T, Error>;
+pub type Version = (i32, i32, i32);
+pub const ResponseLength: usize = ffi::SHA1_MAX_BLOCK_SIZE;
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum ValidationError {
+    InvalidSlot,
+    MinimumVersionNotMet(String),
+}
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Error {
+    Validation(ValidationError),
     UsbError,
     YkError(ffi::YK_ERR),
     Unknown(i32),
@@ -79,7 +90,7 @@ pub struct YubikeyDevice {
 impl Drop for YubikeyDevice {
     fn drop(&mut self) {
         // TODO - check return code?
-        unsafe { ffi::yk_close_key(self.key) }
+        unsafe { ffi::yk_close_key(self.key) };
     }
 }
 
@@ -106,7 +117,7 @@ impl YubikeyDevice {
 }
 
 impl YubikeyStatus {
-    pub fn get_version_triple(&self) -> (i32, i32, i32) {
+    pub fn get_version_triple(&self) -> Version {
         let major = unsafe { ffi::ykds_version_major(self.status) };
         let minor = unsafe { ffi::ykds_version_minor(self.status) };
         let build = unsafe { ffi::ykds_version_build(self.status) };
@@ -119,5 +130,58 @@ impl YubikeyStatus {
 
     pub fn get_touch_level(&self) -> i32 {
         unsafe { ffi::ykds_touch_level(self.status) }
+    }
+}
+
+pub struct ChallengeResponseParams {
+    pub is_hmac: bool,
+    pub slot: u8,
+}
+
+pub trait ChallengeResponse {
+    fn challenge_response(&mut self, params: ChallengeResponseParams, challenge: &[u8], response: &mut [u8; ResponseLength]) -> Result<()>;
+}
+
+impl ChallengeResponse for YubikeyDevice {
+    fn challenge_response(&mut self, params: ChallengeResponseParams, challenge: &[u8], response: &mut [u8; ResponseLength]) -> Result<()> {
+
+        // check version of yubikey
+        let status = try!(self.get_status());
+        let version_triple = status.get_version_triple();
+        if version_triple < MIN_VERSION_CHAL_RESP {
+            return Err(Error::Validation(ValidationError::MinimumVersionNotMet(format!("Expected physical device version >= {:?}, got {:?}",
+                                                                                       MIN_VERSION_CHAL_RESP,
+                                                                                       version_triple))));
+        }
+
+        let may_block = ffi::YK_FLAG_MAYBLOCK;
+        let yk_cmd = match params.slot {
+            1 => {
+                if params.is_hmac {
+                    ffi::SLOT::CHAL_HMAC1
+                } else {
+                    ffi::SLOT::CHAL_OTP1
+                }
+            }
+            2 => {
+                if params.is_hmac {
+                    ffi::SLOT::CHAL_HMAC2
+                } else {
+                    ffi::SLOT::CHAL_OTP2
+                }
+            }
+            _ => return Err(Error::Validation(ValidationError::InvalidSlot)),
+        };
+        let res = unsafe {
+            ffi::yk_challenge_response(self.key,
+                                       yk_cmd as u8,
+                                       may_block,
+                                       challenge.len() as u32,
+                                       challenge.as_ptr(),
+                                       ffi::SHA1_MAX_BLOCK_SIZE as u32,
+                                       response.as_mut_ptr())
+        };
+
+        Error::from_zero_err(res as i32)
     }
 }

@@ -17,12 +17,12 @@ use std::process::exit;
 use docopt::Docopt;
 
 use peroxide_cryptsetup::model::{OpenOperation, EnrollOperation, NewDatabaseOperation, CryptOperation, PeroxideDb, DbLocation,
-                                 DbEntryType, DbType, NewContainerParameters};
+                                 DbEntryType, DbType, NewContainerParameters, YubikeyEntryType};
 use peroxide_cryptsetup::context::MainContext;
 
 static USAGE: &'static str = "
 Usage:
-    peroxs enroll (keyfile <keyfile> | passphrase) (new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits>) <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>] 
+    peroxs enroll (keyfile <keyfile> | passphrase | yubikey [hybrid] --slot=<slot>) [new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits>] <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>] 
     peroxs init <db-type> [at <db>]
     peroxs open <device-or-uuid>... [--name=<name>] [at <db>]
     peroxs (--help | --version)
@@ -35,6 +35,8 @@ Actions:
 Enrollment types:
     keyfile                                 An existing key file with randomness inside
     passphrase                              A password or passphrase
+    yubikey                                 A Yubikey (combined with challenge)
+    yubikey hybrid                          A Yubikey (combined with challenge) and a secondary passphrase
 
 Arguments:
     <db>                                    The path to the database
@@ -52,7 +54,7 @@ Options:
     -h <hash>, --hash <hash>                Hash function to use for new LUKS container
     -n <name>, --name <name>                Name for the device being enrolled
     -s <key-bits>, --key-bits <key-bits>    Number of key bits to use for new LUKS container
-
+    -S <slot>, --slot <slot>                Slot in Yubikey to use
 ";
 
 // FIXME: Adding :PathBuf below causes breakage, why?
@@ -64,6 +66,8 @@ struct Args {
     cmd_open: bool,
     cmd_keyfile: bool,
     cmd_passphrase: bool,
+    cmd_yubikey: bool,
+    cmd_hybrid: bool,
     cmd_at: bool,
     arg_db: Option<String>,
     arg_db_type: Option<DbType>,
@@ -77,6 +81,7 @@ struct Args {
     flag_backup_db: Option<String>,
     flag_iteration_ms: Option<usize>,
     flag_name: Option<String>,
+    flag_slot: Option<u8>,
 }
 
 const PEROXIDE_DB_NAME: &'static str = "peroxs-db.json";
@@ -125,10 +130,27 @@ fn get_new_container_parameters(args: &Args) -> Option<NewContainerParameters> {
     }
 }
 
+fn get_yubikey_entry_type(args: &Args) -> Option<YubikeyEntryType> {
+    if args.cmd_yubikey {
+        let entry_type = if args.cmd_hybrid {
+            YubikeyEntryType::ChallengeResponseHybrid
+        } else {
+            YubikeyEntryType::ChallengeResponse
+        };
+        if args.flag_slot.is_none() {
+            panic!("expecting slot to be specified")
+        }
+        Some(entry_type)
+    } else {
+        None
+    }
+}
+
 fn get_entry_type(args: &Args) -> DbEntryType {
     match args {
         _ if args.cmd_passphrase => DbEntryType::Passphrase,
         _ if args.cmd_keyfile => DbEntryType::Keyfile,
+        _ if args.cmd_yubikey => DbEntryType::Yubikey,
         _ => panic!("BUG: Unrecognised entry type!"),
     }
 }
@@ -141,6 +163,7 @@ fn _enroll_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<
     let entry_type = get_entry_type(&args);
     let name = args.flag_name.clone();
     let maybe_keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
+    let yubikey_entry_type = get_yubikey_entry_type(args);
     CryptOperation::Enroll(EnrollOperation {
         context: context,
         entry_type: entry_type,
@@ -150,6 +173,8 @@ fn _enroll_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<
         keyfile: maybe_keyfile,
         backup_context: backup_db_context,
         name: name,
+        yubikey_slot: args.flag_slot.clone(),
+        yubikey_entry_type: yubikey_entry_type,
     })
 }
 

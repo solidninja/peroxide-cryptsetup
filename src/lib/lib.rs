@@ -1,4 +1,4 @@
-#![deny(warnings)]
+// #![deny(warnings)]
 #[warn(unused_must_use)]
 
 extern crate rustc_serialize;
@@ -18,6 +18,12 @@ pub mod model;
 pub mod operation;
 mod io;
 pub mod context;
+
+#[cfg(feature = "yubikey")]
+mod yubikey;
+
+#[cfg(feature = "yubikey")]
+extern crate ykpers_rs;
 
 #[cfg(test)]
 extern crate tempfile;

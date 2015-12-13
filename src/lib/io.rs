@@ -211,6 +211,21 @@ mod unsafe_passphrase {
     }
 }
 
+#[cfg(feature = "yubikey")]
+pub mod yubikey {
+    use super::KeyWrapper;
+    use ykpers_rs::{YubikeyDevice, ResponseLength, ChallengeResponse, ChallengeResponseParams};
+    use ykpers_rs;
+
+    pub fn challenge_response(dev: &mut YubikeyDevice,
+                              params: ChallengeResponseParams,
+                              challenge: &KeyWrapper)
+                              -> ykpers_rs::Result<KeyWrapper> {
+        let mut response = [0u8; ResponseLength];
+        // TODO - how to avoid the clone in .to_vec()
+        dev.challenge_response(params, challenge.as_vec(), &mut response).map(|_| KeyWrapper { data: response.to_vec() })
+    }
+}
 
 
 #[cfg(test)]

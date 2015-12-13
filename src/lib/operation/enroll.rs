@@ -140,11 +140,19 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
     fn get_previous_key_wrapper(&self, entry: Option<&DbEntry>) -> Result<Option<KeyWrapper>> {
         entry.map(|previous_entry| {
                  match previous_entry {
-                     passphrase_entry @ &DbEntry::PassphraseEntry { .. } => {
-                         self.context.read_password(&passphrase_entry.volume_id().prompt_string())
-                     }
+                     &DbEntry::PassphraseEntry { ref volume_id } => self.context.read_password(&volume_id.prompt_string()),
                      &DbEntry::KeyfileEntry { ref key_file, .. } => {
                          self.backup_context.as_ref().map(|ctx| ctx.read_keyfile(&key_file)).unwrap()
+                     }
+                     &DbEntry::YubikeyEntry { ref slot, ref entry_type, ref volume_id} => {
+                         self.backup_context
+                             .as_ref()
+                             .map(|ctx| {
+                                 ctx.read_yubikey(Some(&volume_id.prompt_name()),
+                                                  slot.clone(),
+                                                  entry_type.clone())
+                             })
+                             .unwrap()
                      }
                  }
                  .map_err(OperationError::from)
@@ -157,6 +165,11 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
         match self.entry_type {
             DbEntryType::Passphrase => self.context.read_password("Please enter new passphrase:"),
             DbEntryType::Keyfile => self.keyfile.as_ref().map(|keyfile| self.context.read_keyfile(keyfile)).unwrap(),
+            DbEntryType::Yubikey => {
+                self.context.read_yubikey(None,
+                                          self.yubikey_slot.as_ref().unwrap().clone(),
+                                          self.yubikey_entry_type.as_ref().unwrap().clone())
+            }
         }
         .map_err(OperationError::from)
     }
@@ -169,7 +182,14 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
                     key_file: self.keyfile.as_ref().unwrap().clone(),
                     volume_id: volume_id,
                 }
-            } 
+            }
+            DbEntryType::Yubikey => {
+                DbEntry::YubikeyEntry {
+                    slot: self.yubikey_slot.as_ref().unwrap().clone(),
+                    entry_type: self.yubikey_entry_type.as_ref().unwrap().clone(),
+                    volume_id: volume_id,
+                }
+            }
         }
     }
 }
