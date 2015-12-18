@@ -18,9 +18,9 @@ os:
 script:
   - cargo build --verbose
   - sudo /bin/sh -c "PATH=/home/travis/rust/bin:/usr/bin:/bin:/sbin LD_LIBRARY_PATH=/home/travis/rust/lib cargo test --verbose"
- addons:
-   apt:
-     packages:
-       - libcryptsetup-dev
-       - libykpers-1-dev
-       - libsodium-dev
+addons:
+  apt:
+    packages:
+      - libcryptsetup-dev
+      - libykpers-1-dev
+      - libsodium-dev
