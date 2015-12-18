@@ -22,3 +22,5 @@ script:
    apt:
      packages:
        - libcryptsetup-dev
+       - libykpers-1-dev
+       - libsodium-dev
