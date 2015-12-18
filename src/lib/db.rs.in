@@ -20,12 +20,22 @@ pub struct PeroxideDb {
 pub enum DbEntryType {
 	Keyfile,
 	Passphrase,
+	Yubikey,
+}
+
+pub type YubikeySlot = u8;
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub enum YubikeyEntryType {
+	ChallengeResponse,
+	HybridChallengeResponse,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum DbEntry {
 	KeyfileEntry { key_file: path::PathBuf, volume_id: VolumeId },
 	PassphraseEntry { volume_id: VolumeId },
+	YubikeyEntry { entry_type: YubikeyEntryType, slot: YubikeySlot, volume_id: VolumeId },
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]

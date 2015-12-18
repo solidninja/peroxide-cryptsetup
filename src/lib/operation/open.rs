@@ -84,6 +84,7 @@ impl<Context> OpenOperation<Context> where Context: context::ReaderContext + con
         match db_entry {
             &DbEntry::KeyfileEntry { .. } => self.open_keyfile(device, db_entry, &name),
             &DbEntry::PassphraseEntry { .. } => self.open_passphrase(device, db_entry, &name),
+            &DbEntry::YubikeyEntry { .. } => self.open_yubikey(device, db_entry, &name),
         }
     }
 
@@ -92,7 +93,7 @@ impl<Context> OpenOperation<Context> where Context: context::ReaderContext + con
             self.context
                 .read_keyfile(key_file)
                 .map_err(From::from)
-                .and_then(|key| cd.activate(&name, key.as_vec()).map_err(|e| From::from((cd.path.clone(), e))))
+                .and_then(|key| cd.activate(&name, key.as_slice()).map_err(|e| From::from((cd.path.clone(), e))))
         } else {
             Err(OperationError::BugExplanation(format!("Expected KeyfileEntry, but got {:?}", db_entry)))
         }
@@ -104,9 +105,23 @@ impl<Context> OpenOperation<Context> where Context: context::ReaderContext + con
             self.context
                 .read_password(&prompt)
                 .map_err(From::from)
-                .and_then(|key| cd.activate(&name, key.as_vec()).map_err(|e| From::from((cd.path.clone(), e))))
+                .and_then(|key| cd.activate(&name, key.as_slice()).map_err(|e| From::from((cd.path.clone(), e))))
         } else {
             Err(OperationError::BugExplanation(format!("Expected PassphraseEntry, but got {:?}", db_entry)))
+        }
+    }
+
+    fn open_yubikey(&self, cd: &mut CryptDevice, db_entry: &DbEntry, name: &str) -> Result<()> {
+        if let &DbEntry::YubikeyEntry { ref slot, ref entry_type, ref volume_id } = db_entry {
+            self.context
+                .read_yubikey(Some(name),
+                              &volume_id.id.uuid,
+                              slot.clone(),
+                              entry_type.clone())
+                .map_err(From::from)
+                .and_then(|key| cd.activate(&name, key.as_slice()).map_err(|e| From::from((cd.path.clone(), e))))
+        } else {
+            Err(OperationError::BugExplanation(format!("Expected YubikeyEntry, but got {:?}", db_entry)))
         }
     }
 }

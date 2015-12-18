@@ -8,7 +8,7 @@ use std::time::Duration;
 use uuid;
 
 use io::{KeyWrapper, FileExtensions, Disks, TerminalPrompt};
-use model::{DbLocation, PeroxideDb};
+use model::{DbLocation, PeroxideDb, YubikeySlot, YubikeyEntryType};
 use cryptsetup_rs::device::CryptDevice;
 
 pub type Result<T> = result::Result<T, Error>;
@@ -29,6 +29,11 @@ pub enum Error {
         path: Option<PathBuf>,
         cause: io::Error,
     },
+    YubikeyError {
+        message: String,
+    },
+    UnknownCryptoError,
+    FeatureNotAvailable,
 }
 
 pub trait HasDbLocation {
@@ -41,6 +46,10 @@ pub trait KeyfileInput: Sized {
 
 pub trait PasswordInput: Sized {
     fn read_password(&self, prompt: &str) -> Result<KeyWrapper>;
+}
+
+pub trait YubikeyInput: PasswordInput {
+    fn read_yubikey(&self, name: Option<&str>, uuid: &uuid::Uuid, slot: YubikeySlot, entry_type: YubikeyEntryType) -> Result<KeyWrapper>;
 }
 
 pub trait DiskSelector {
@@ -97,6 +106,14 @@ impl PasswordInput for MainContext {
     }
 }
 
+#[cfg(not(feature = "yubikey"))]
+impl YubikeyInput for MainContext {
+    #[allow(unused)]
+    fn read_yubikey(&self, name: Option<&str>, uuid: &uuid::Uuid, slot: YubikeySlot, entry_type: YubikeyEntryType) -> Result<KeyWrapper> {
+        Err(Error::FeatureNotAvailable)
+    }
+}
+
 impl DiskSelector for MainContext {
     fn all_disk_uuids(&self) -> Result<Vec<uuid::Uuid>> {
         Disks::all_disk_uuids().map_err(|err| {
@@ -145,7 +162,7 @@ impl PeroxideDbWriter for MainContext {
 
 pub trait ReaderContext: HasDbLocation + PeroxideDbReader {}
 pub trait WriterContext: ReaderContext + PeroxideDbWriter { }
-pub trait InputContext: KeyfileInput + PasswordInput { }
+pub trait InputContext: KeyfileInput + PasswordInput + YubikeyInput {}
 
 impl ReaderContext for MainContext {}
 impl WriterContext for MainContext {}
@@ -244,7 +261,7 @@ pub mod tests {
         let (keyfile_path, keyfile_temp_file) = temp_context.write_keyfile(Some(Path::new("test_subdir")), &expected_content).unwrap();
 
         let key_contents = temp_context.main_context.read_keyfile(&keyfile_path).unwrap();
-        assert_eq!(key_contents.as_vec(), &expected_content as &[u8]);
+        assert_eq!(key_contents.as_slice(), &expected_content as &[u8]);
 
         // not strictly necessary because destructor will probably run. Avoid the unused variable warning anyway
         keyfile_temp_file.close().unwrap();

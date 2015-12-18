@@ -19,6 +19,15 @@ pub mod operation;
 mod io;
 pub mod context;
 
+#[cfg(feature = "yubikey")]
+mod yubikey;
+
+#[cfg(feature = "yubikey")]
+extern crate ykpers_rs;
+
+#[cfg(feature = "yubikey_hybrid")]
+extern crate sodiumoxide;
+
 #[cfg(test)]
 extern crate tempfile;
 

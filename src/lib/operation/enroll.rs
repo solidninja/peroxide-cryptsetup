@@ -1,5 +1,7 @@
 use cryptsetup_rs::device::{CryptDevice, crypt_device_type};
 
+use uuid;
+
 use operation::{PerformCryptOperation, EnrollOperation, OperationError, UserDiskLookup, Result, PasswordPromptString};
 use model::{DbEntryType, DbEntry, VolumeId};
 use io::{FileExtensions, KeyWrapper};
@@ -89,6 +91,8 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
         if self.new_container.is_some() {
             None
         } else {
+            // FIXME remove unimplemented!()
+            device.load(crypt_device_type::LUKS1).unwrap();
             // if there is no backup db or backup db open/lookup failed, use a passphrase entry
             self.backup_context
                 .as_ref()
@@ -112,14 +116,14 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
 
             // get keys
             let maybe_previous_key = try!(self.get_previous_key_wrapper(entry));
-            let new_key = try!(self.get_new_key_wrapper());
+            let new_key = try!(self.get_new_key_wrapper(&uuid));
 
             // set parameters
             cd.set_iteration_time(self.iteration_ms as u64);
 
             // enroll
-            try!(cd.add_keyslot(new_key.as_vec(),
-                                maybe_previous_key.as_ref().map(|k| k.as_vec()),
+            try!(cd.add_keyslot(new_key.as_slice(),
+                                maybe_previous_key.as_ref().map(|k| k.as_slice()),
                                 None)
                    .map_err(|e| OperationError::from((&cd.path, e))));
 
@@ -140,11 +144,20 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
     fn get_previous_key_wrapper(&self, entry: Option<&DbEntry>) -> Result<Option<KeyWrapper>> {
         entry.map(|previous_entry| {
                  match previous_entry {
-                     passphrase_entry @ &DbEntry::PassphraseEntry { .. } => {
-                         self.context.read_password(&passphrase_entry.volume_id().prompt_string())
-                     }
+                     &DbEntry::PassphraseEntry { ref volume_id } => self.context.read_password(&volume_id.prompt_string()),
                      &DbEntry::KeyfileEntry { ref key_file, .. } => {
                          self.backup_context.as_ref().map(|ctx| ctx.read_keyfile(&key_file)).unwrap()
+                     }
+                     &DbEntry::YubikeyEntry { ref slot, ref entry_type, ref volume_id} => {
+                         self.backup_context
+                             .as_ref()
+                             .map(|ctx| {
+                                 ctx.read_yubikey(Some(&volume_id.prompt_name()),
+                                                  &volume_id.id.uuid,
+                                                  slot.clone(),
+                                                  entry_type.clone())
+                             })
+                             .unwrap()
                      }
                  }
                  .map_err(OperationError::from)
@@ -153,10 +166,16 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
              .unwrap_or(Ok(None))
     }
 
-    fn get_new_key_wrapper(&self) -> Result<KeyWrapper> {
+    fn get_new_key_wrapper(&self, uuid: &uuid::Uuid) -> Result<KeyWrapper> {
         match self.entry_type {
             DbEntryType::Passphrase => self.context.read_password("Please enter new passphrase:"),
             DbEntryType::Keyfile => self.keyfile.as_ref().map(|keyfile| self.context.read_keyfile(keyfile)).unwrap(),
+            DbEntryType::Yubikey => {
+                self.context.read_yubikey(None,
+                                          uuid,
+                                          self.yubikey_slot.as_ref().unwrap().clone(),
+                                          self.yubikey_entry_type.as_ref().unwrap().clone())
+            }
         }
         .map_err(OperationError::from)
     }
@@ -169,7 +188,14 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
                     key_file: self.keyfile.as_ref().unwrap().clone(),
                     volume_id: volume_id,
                 }
-            } 
+            }
+            DbEntryType::Yubikey => {
+                DbEntry::YubikeyEntry {
+                    slot: self.yubikey_slot.as_ref().unwrap().clone(),
+                    entry_type: self.yubikey_entry_type.as_ref().unwrap().clone(),
+                    volume_id: volume_id,
+                }
+            }
         }
     }
 }
@@ -220,6 +246,8 @@ mod tests {
             keyfile: Some(keyfile_path.to_path_buf()),
             backup_context: None,
             name: Some("a_name".to_string()),
+            yubikey_entry_type: None,
+            yubikey_slot: None,
         };
         enroll_op.apply().unwrap();
 
