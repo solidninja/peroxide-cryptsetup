@@ -12,7 +12,7 @@ use uuid;
 use cryptsetup_rs::device::CryptDevice;
 
 use context;
-use model::{DbEntryType, VolumeId};
+use model::{DbEntryType, VolumeId, YubikeySlot, YubikeyEntryType};
 
 pub type Result<T> = result::Result<T, OperationError>;
 
@@ -43,6 +43,8 @@ pub struct EnrollOperation<Context, BackupContext>
     pub keyfile: Option<PathBuf>,
     pub backup_context: Option<BackupContext>,
     pub name: Option<String>,
+    pub yubikey_slot: Option<YubikeySlot>,
+    pub yubikey_entry_type: Option<YubikeyEntryType>,
 }
 
 trait PerformCryptOperation {
@@ -85,6 +87,8 @@ pub enum OperationError {
     DbSaveFailed,
     NotFoundInDb(String),
     BugExplanation(String),
+    FeatureNotAvailable,
+    UnknownCryptoError,
 }
 
 impl fmt::Display for OperationError {
@@ -110,6 +114,8 @@ impl fmt::Display for OperationError {
             &OperationError::DbSaveFailed => write!(fmt, "Saving database failed"),
             &OperationError::NotFoundInDb(ref expl) => write!(fmt, "Entry was not found in db: {}", expl),
             &OperationError::BugExplanation(ref expl) => write!(fmt, "BUG: {}", expl),
+            &OperationError::FeatureNotAvailable => write!(fmt, "This feature is not available"),
+            &OperationError::UnknownCryptoError => write!(fmt, "Unknown crypto operation error occurred"),
         }
     }
 }
@@ -125,7 +131,10 @@ impl convert::From<context::Error> for OperationError {
             context::Error::DatabaseIoError { path, cause } => {
                 OperationError::Action(Some(format!("IO operation failed for peroxide database {:?}", path)),
                                        cause)
-            }   
+            }
+            context::Error::YubikeyError { message } => OperationError::Action(Some(message), io::Error::new(io::ErrorKind::Other, "")),
+            context::Error::FeatureNotAvailable => OperationError::FeatureNotAvailable,
+            context::Error::UnknownCryptoError => OperationError::UnknownCryptoError,
         }
     }
 }
@@ -169,14 +178,19 @@ trait UserDiskLookup {
 
 trait PasswordPromptString {
     fn prompt_string(&self) -> String;
+    fn prompt_name(&self) -> String;
 }
 
 impl PasswordPromptString for VolumeId {
-    fn prompt_string(&self) -> String {
+    fn prompt_name(&self) -> String {
         self.name
             .as_ref()
-            .map(|name| format!("Please enter passphrase for '{}':", name))
-            .unwrap_or_else(|| format!("Please enter passphrase for uuid={}:", self.id.uuid))
+            .map(|name| format!("'{}'", name))
+            .unwrap_or_else(|| format!("uuid={}", self.id.uuid))
+    }
+
+    fn prompt_string(&self) -> String {
+        format!("Please enter existing passphrase for {}: ", self.prompt_name())
     }
 }
 

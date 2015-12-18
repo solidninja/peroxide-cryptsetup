@@ -10,15 +10,20 @@ sudo: required
 dist: trusty
 os:
   - linux
-# install:
-# - sudo apt-get update
+# libsodium is not available on older releases 
+install:
+  - sudo add-apt-repository ppa:chris-lea/libsodium -y
+  - sudo apt-get update
+  - sudo apt-get install libsodium-dev -y
 #  - sudo apt-get install libcryptsetup-dev
 #  - which cargo
 #  - /bin/sh -c "env"
 script:
   - cargo build --verbose
   - sudo /bin/sh -c "PATH=/home/travis/rust/bin:/usr/bin:/bin:/sbin LD_LIBRARY_PATH=/home/travis/rust/lib cargo test --verbose"
- addons:
-   apt:
-     packages:
-       - libcryptsetup-dev
+addons:
+  apt:
+    packages:
+      - libcryptsetup-dev
+      - libykpers-1-dev
+        #- libsodium-dev

@@ -36,7 +36,8 @@ impl DbEntry {
     pub fn volume_id<'a>(&'a self) -> &'a VolumeId {
         match *self {
             DbEntry::KeyfileEntry { ref volume_id, .. } => volume_id, 
-            DbEntry::PassphraseEntry { ref volume_id, .. } => volume_id, 	
+            DbEntry::PassphraseEntry { ref volume_id, .. } => volume_id,
+            DbEntry::YubikeyEntry { ref volume_id, .. } => volume_id,
         }
     }
 

@@ -47,7 +47,7 @@ _verbatim from [peroxs.rs](src/bin/peroxs.rs)_
 
 ```
 Usage:
-    peroxs enroll (keyfile <keyfile> | passphrase) (new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits>) <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>] 
+    peroxs enroll (keyfile <keyfile> | passphrase | yubikey [hybrid] --slot=<slot>) [new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits>] <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>] 
     peroxs init <db-type> [at <db>]
     peroxs open <device-or-uuid>... [--name=<name>] [at <db>]
     peroxs (--help | --version)
@@ -60,6 +60,8 @@ Actions:
 Enrollment types:
     keyfile                                 An existing key file with randomness inside
     passphrase                              A password or passphrase
+    yubikey                                 A Yubikey (combined with challenge)
+    yubikey hybrid                          A Yubikey (combined with challenge) and a secondary passphrase
 
 Arguments:
     <db>                                    The path to the database
@@ -77,6 +79,7 @@ Options:
     -h <hash>, --hash <hash>                Hash function to use for new LUKS container
     -n <name>, --name <name>                Name for the device being enrolled
     -s <key-bits>, --key-bits <key-bits>    Number of key bits to use for new LUKS container
+    -S <slot>, --slot <slot>                Slot in Yubikey to use
 ```
 
 ## Roadmap
