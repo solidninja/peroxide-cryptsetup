@@ -1,0 +1,16 @@
+[package]
+name = "libykpers-sys"
+version = "0.1.0"
+authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
+description = "Rust bindings to libykpers"
+links = "ykpers-1"
+build = "build.rs"
+
+[lib]
+name = "libykpers_sys"
+
+[dependencies]
+libc = "*"
+
+[build-dependencies]
+pkg-config = "*"

@@ -29,7 +29,10 @@ impl TestContext {
         env_logger::init().unwrap();
         CryptDevice::enable_debug(true);
         let dir = tempdir::TempDir::new(&name).unwrap();
-        TestContext { name: name, dir: dir }
+        TestContext {
+            name: name,
+            dir: dir,
+        }
     }
 
     fn new_crypt_device(&self) -> CryptDevice {
@@ -44,7 +47,7 @@ impl TestContext {
         if !dd_status.success() {
             panic!("Failed to create disk image at {}", crypt_file.display());
         }
-        
+
         let mut device = CryptDevice::new(crypt_file).unwrap();
         // use speedy rng
         device.set_rng_type(crypt_rng_type::CRYPT_RNG_URANDOM);
@@ -61,7 +64,7 @@ fn test_create_new_luks_cryptdevice_no_errors() {
     cd.set_iteration_time(42);
     expect!(cd.format_luks("aes", "xts-plain", "sha256", 256, Some(&uuid))).to(be_ok());
     expect!(cd.dump()).to(be_ok());
-    
+
     expect!(cd.uuid()).to(be_some().value(uuid));
     expect!(cd.device_type()).to(be_some().value(crypt_device_type::LUKS1));
     expect!(cd.cipher()).to(be_some().value("aes"));
