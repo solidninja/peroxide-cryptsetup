@@ -224,59 +224,14 @@ pub mod yubikey {
 
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
-    use tempfile::TempFile;
-    use tempdir::TempDir;
-    use std::io;
-    use std::io::{Seek, Read, Write};
-    use model::{DbType, DbLocation, PeroxideDb};
 
     use expectest::prelude::*;
-
-    pub struct DbLocationWrapper(pub TempDir, pub DbLocation);
-
-    impl PeroxideDb {
-        pub fn new_temporary_db(db_type: DbType) -> (PeroxideDb, DbLocationWrapper) {
-            let db = PeroxideDb::new(db_type.clone());
-            let temp_dir = TempDir::new("db_test").unwrap();
-            let db_location = DbLocation {
-                path: temp_dir.path().join("temp.db"),
-                db_type: db_type,
-            };
-
-            (db, DbLocationWrapper(temp_dir, db_location))
-        }
-    }
-
-
-    impl KeyWrapper {
-        pub fn save_in<W: Read + Write + Seek>(file: &mut W, contents: &[u8]) -> io::Result<KeyWrapper> {
-            try!(file.seek(io::SeekFrom::Start(0)));
-            try!(file.write_all(contents));
-            try!(file.seek(io::SeekFrom::Start(0)));
-            KeyWrapper::read(file)
-        }
-    }
-
-    // TODO - write tests for the relativisation of paths
-    // TODO - how to test that secret key is gone from memory instead of relying on rust zeroing it out for us
-
-    #[test]
-    fn test_load_key_from_file() {
-        let mut temp_keyfile = TempFile::new().unwrap();
-        let contents = vec![0xD, 0xE, 0xA, 0xD, 0xB, 0xE, 0xE, 0xF];
-        let key_wrapper = KeyWrapper::save_in(&mut temp_keyfile, &contents).unwrap();
-
-        assert_eq!(contents, key_wrapper.data);
-    }
 
     #[test]
     fn test_all_disks_uuids_must_return_something() {
         let maybe_uuids = Disks::all_disk_uuids();
         expect!(maybe_uuids).to(be_ok());
     }
-
-    // TODO - write test for disk path
-
 }

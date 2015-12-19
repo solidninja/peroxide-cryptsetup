@@ -23,7 +23,7 @@ pub struct NewDatabaseOperation<Context: context::WriterContext> {
 
 #[derive(Debug)]
 pub struct OpenOperation<Context>
-    where Context: context::ReaderContext + context::InputContext + context::DiskSelector
+where Context: context::ReaderContext + context::InputContext + context::DiskSelector + ApplyCryptDeviceOptions
 {
     pub context: Context,
     pub device_paths_or_uuids: Vec<String>,
@@ -32,8 +32,8 @@ pub struct OpenOperation<Context>
 
 #[derive(Debug)]
 pub struct EnrollOperation<Context, BackupContext>
-    where Context: context::WriterContext + context::InputContext + context::DiskSelector,
-          BackupContext: context::ReaderContext + context::InputContext
+where Context: context::WriterContext + context::InputContext + context::DiskSelector + ApplyCryptDeviceOptions,
+BackupContext: context::ReaderContext + context::InputContext
 {
     pub context: Context,
     pub entry_type: DbEntryType,
@@ -47,8 +47,8 @@ pub struct EnrollOperation<Context, BackupContext>
     pub yubikey_entry_type: Option<YubikeyEntryType>,
 }
 
-trait PerformCryptOperation {
-    fn apply(self) -> Result<()>;
+pub trait PerformCryptOperation {
+    fn apply(&self) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -130,7 +130,7 @@ impl convert::From<context::Error> for OperationError {
             }
             context::Error::DatabaseIoError { path, cause } => {
                 OperationError::Action(Some(format!("IO operation failed for peroxide database {:?}", path)),
-                                       cause)
+                cause)
             }
             context::Error::YubikeyError { message } => OperationError::Action(Some(message), io::Error::new(io::ErrorKind::Other, "")),
             context::Error::FeatureNotAvailable => OperationError::FeatureNotAvailable,
@@ -194,28 +194,41 @@ impl PasswordPromptString for VolumeId {
     }
 }
 
-impl<C> UserDiskLookup for C where C: context::DiskSelector
+pub trait ApplyCryptDeviceOptions {
+    fn apply_options(cd: CryptDevice) -> CryptDevice;
+}
+
+impl ApplyCryptDeviceOptions for context::MainContext {
+    #[inline]
+    fn apply_options(cd: CryptDevice) -> CryptDevice {
+        cd 
+    }
+}
+
+impl<C> UserDiskLookup for C where C: context::DiskSelector + ApplyCryptDeviceOptions
 {
     fn resolve_paths_or_uuids<'a>(&self, paths_or_uuids: &'a [String]) -> HashMap<&'a String, context::Result<PathBuf>> {
         paths_or_uuids.iter()
-                      .map(|s| (s, PathOrUuid::from_str(s).unwrap()))
-                      .map(|(s, path_or_uuid)| {
-                          (s,
-                           match path_or_uuid {
-                              PathOrUuid::Path(path) => Ok(path),
-                              PathOrUuid::Uuid(uuid) => self.disk_uuid_path(&uuid),
-                          })
-                      })
-                      .collect()
+            .map(|s| (s, PathOrUuid::from_str(s).unwrap()))
+            .map(|(s, path_or_uuid)| {
+                (s,
+                 match path_or_uuid {
+                     PathOrUuid::Path(path) => Ok(path),
+                     PathOrUuid::Uuid(uuid) => self.disk_uuid_path(&uuid),
+                 })
+            })
+        .collect()
     }
 
     fn lookup_devices<'a>(&self, paths_or_uuids: &'a [String]) -> Result<Vec<CryptDevice>> {
         self.resolve_paths_or_uuids(paths_or_uuids)
             .values()
             .map(|res| res.as_ref().map_err(From::from))
-            .map(|maybe_path| {
-                maybe_path.and_then(|device_path| CryptDevice::new(device_path.clone()).map_err(|err| From::from((device_path, err))))
-            })
+            .map(|maybe_path| maybe_path
+                 .and_then(|device_path| CryptDevice::new(device_path.clone())
+                           .map(Self::apply_options)
+                           .map_err(|err| From::from((device_path, err))))
+                )
             .collect()
     }
 }

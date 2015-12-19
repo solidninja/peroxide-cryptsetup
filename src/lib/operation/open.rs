@@ -5,7 +5,7 @@ use context::{DiskSelector, KeyfileInput, PeroxideDbReader};
 use context;
 use io::Disks;
 use model::{DbEntry, VolumeId};
-use operation::{PerformCryptOperation, OpenOperation, OperationError, UserDiskLookup, Result};
+use operation::{PerformCryptOperation, OpenOperation, OperationError, UserDiskLookup, Result, ApplyCryptDeviceOptions};
 
 struct NamingContext {
     device_index: usize,
@@ -27,9 +27,9 @@ impl NamingContext {
 }
 
 impl<Context> PerformCryptOperation for OpenOperation<Context>
-    where Context: context::ReaderContext + context::InputContext + context::DiskSelector
+    where Context: context::ReaderContext + context::InputContext + context::DiskSelector + ApplyCryptDeviceOptions
 {
-    fn apply(self) -> Result<()> {
+    fn apply(&self) -> Result<()> {
         let db = try!(self.context.open_peroxide_db().map_err(|_| OperationError::DbOpenFailed));
 
         // TODO - do we need to incorporate blkid_rs::BlockDevice::read_luks_header or is device.load() enough?
@@ -68,7 +68,7 @@ impl<Context> PerformCryptOperation for OpenOperation<Context>
     }
 }
 
-impl<Context> OpenOperation<Context> where Context: context::ReaderContext + context::InputContext + context::DiskSelector
+impl<Context> OpenOperation<Context> where Context: context::ReaderContext + context::InputContext + context::DiskSelector + ApplyCryptDeviceOptions
 {
     fn validate_open_entry<'a>(&self, db_entry: &'a DbEntry, name_ctx: &NamingContext) -> Result<&'a DbEntry> {
         let proposed_name = name_ctx.device_name(self.name.as_ref(), db_entry.volume_id());

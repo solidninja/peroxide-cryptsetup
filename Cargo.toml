@@ -46,6 +46,9 @@ name = "peroxs"
 test = false
 doc = false
 
+[[test]]
+name = "tests"
+
 [profile.dev]
 codegen-units = 4
 
