@@ -71,6 +71,5 @@ fn test_create_new_luks_cryptdevice_no_errors() {
     expect!(cd.cipher_mode()).to(be_some().value("xts-plain"));
     expect!(cd.volume_key_size()).to(be_some().value(32));
 
-    expect!(cd.add_keyslot(b"hello\0 world", None, None)).to(be_ok());
-    // TODO verify keyslot was added correctly
+    expect!(cd.add_keyslot(b"hello\0 world", None, Some(3))).to(be_ok().value(3));
 }

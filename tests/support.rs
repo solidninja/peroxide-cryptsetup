@@ -148,4 +148,3 @@ impl RelativeTo for NamedTempFile {
         }
     }
 }
-

@@ -20,5 +20,3 @@ mod test_open;
 
 #[cfg(feature = "yubikey")]
 mod test_yubikey;
-
-

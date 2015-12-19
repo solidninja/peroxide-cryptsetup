@@ -168,4 +168,3 @@ pub trait InputContext: KeyfileInput + PasswordInput + YubikeyInput {}
 impl ReaderContext for MainContext {}
 impl WriterContext for MainContext {}
 impl InputContext for MainContext {}
-

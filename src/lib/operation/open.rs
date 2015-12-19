@@ -1,4 +1,4 @@
-use cryptsetup_rs::device::{crypt_device_type, CryptDevice};
+use cryptsetup_rs::device::{crypt_device_type, CryptDevice, Keyslot};
 
 
 use context::{DiskSelector, KeyfileInput, PeroxideDbReader};
@@ -63,12 +63,13 @@ impl<Context> PerformCryptOperation for OpenOperation<Context>
 
         devices_with_entries.iter_mut()
                             .map(|&mut (ref mut device, ref entry, ref name_ctx)| self.open_entry(device, entry, name_ctx))
-                            .collect::<Result<Vec<()>>>()
+                            .collect::<Result<Vec<_>>>()
                             .map(|_| ())  // TODO better pattern?
     }
 }
 
-impl<Context> OpenOperation<Context> where Context: context::ReaderContext + context::InputContext + context::DiskSelector + ApplyCryptDeviceOptions
+impl<Context> OpenOperation<Context>
+    where Context: context::ReaderContext + context::InputContext + context::DiskSelector + ApplyCryptDeviceOptions
 {
     fn validate_open_entry<'a>(&self, db_entry: &'a DbEntry, name_ctx: &NamingContext) -> Result<&'a DbEntry> {
         let proposed_name = name_ctx.device_name(self.name.as_ref(), db_entry.volume_id());
@@ -79,7 +80,7 @@ impl<Context> OpenOperation<Context> where Context: context::ReaderContext + con
         }
     }
 
-    fn open_entry(&self, device: &mut CryptDevice, db_entry: &DbEntry, name_ctx: &NamingContext) -> Result<()> {
+    fn open_entry(&self, device: &mut CryptDevice, db_entry: &DbEntry, name_ctx: &NamingContext) -> Result<Keyslot> {
         let name = name_ctx.device_name(self.name.as_ref(), db_entry.volume_id());
         match db_entry {
             &DbEntry::KeyfileEntry { .. } => self.open_keyfile(device, db_entry, &name),
@@ -88,7 +89,7 @@ impl<Context> OpenOperation<Context> where Context: context::ReaderContext + con
         }
     }
 
-    fn open_keyfile(&self, cd: &mut CryptDevice, db_entry: &DbEntry, name: &str) -> Result<()> {
+    fn open_keyfile(&self, cd: &mut CryptDevice, db_entry: &DbEntry, name: &str) -> Result<Keyslot> {
         if let &DbEntry::KeyfileEntry { ref key_file, .. } = db_entry {
             self.context
                 .read_keyfile(key_file)
@@ -99,7 +100,7 @@ impl<Context> OpenOperation<Context> where Context: context::ReaderContext + con
         }
     }
 
-    fn open_passphrase(&self, cd: &mut CryptDevice, db_entry: &DbEntry, name: &str) -> Result<()> {
+    fn open_passphrase(&self, cd: &mut CryptDevice, db_entry: &DbEntry, name: &str) -> Result<Keyslot> {
         if let &DbEntry::PassphraseEntry { .. } = db_entry {
             let prompt = format!("Please enter passphrase to open '{}':", name);
             self.context
@@ -111,7 +112,7 @@ impl<Context> OpenOperation<Context> where Context: context::ReaderContext + con
         }
     }
 
-    fn open_yubikey(&self, cd: &mut CryptDevice, db_entry: &DbEntry, name: &str) -> Result<()> {
+    fn open_yubikey(&self, cd: &mut CryptDevice, db_entry: &DbEntry, name: &str) -> Result<Keyslot> {
         if let &DbEntry::YubikeyEntry { ref slot, ref entry_type, ref volume_id } = db_entry {
             self.context
                 .read_yubikey(Some(name),

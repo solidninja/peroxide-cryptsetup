@@ -2,14 +2,15 @@ use cryptsetup_rs::device::{CryptDevice, crypt_device_type};
 
 use uuid;
 
-use operation::{PerformCryptOperation, EnrollOperation, OperationError, UserDiskLookup, Result, PasswordPromptString, ApplyCryptDeviceOptions};
+use operation::{PerformCryptOperation, EnrollOperation, OperationError, UserDiskLookup, Result, PasswordPromptString,
+                ApplyCryptDeviceOptions};
 use model::{DbEntryType, DbEntry, VolumeId};
 use io::{FileExtensions, KeyWrapper};
 use context::{WriterContext, ReaderContext, InputContext, HasDbLocation, KeyfileInput, PasswordInput, PeroxideDbReader, PeroxideDbWriter,
               DiskSelector};
 
 impl<Context, BackupContext> PerformCryptOperation for EnrollOperation<Context, BackupContext>
-    where Context: WriterContext + InputContext + DiskSelector + ApplyCryptDeviceOptions, 
+    where Context: WriterContext + InputContext + DiskSelector + ApplyCryptDeviceOptions,
           BackupContext: ReaderContext + InputContext
 {
     fn apply(&self) -> Result<()> {

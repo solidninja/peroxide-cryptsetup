@@ -16,6 +16,7 @@ use raw;
 
 pub type Error = errno::Errno;
 pub type Result<T> = result::Result<T, Error>;
+pub type Keyslot = u8;
 
 pub use raw::{crypt_device_type, crypt_rng_type};
 
@@ -202,7 +203,7 @@ impl CryptDevice {
         }
     }
 
-    pub fn add_keyslot(&mut self, key: &[u8], maybe_prev_key: Option<&[u8]>, maybe_keyslot: Option<u8>) -> Result<()> {
+    pub fn add_keyslot(&mut self, key: &[u8], maybe_prev_key: Option<&[u8]>, maybe_keyslot: Option<Keyslot>) -> Result<Keyslot> {
         let c_key_len = key.len() as libc::size_t;
         let c_key = unsafe { ffi::CString::from_vec_unchecked(key.to_owned()) };
         let c_keyslot = maybe_keyslot.map(|k| k as libc::c_int).unwrap_or(ANY_KEYSLOT as libc::c_int);
@@ -222,7 +223,7 @@ impl CryptDevice {
         } else {
             unsafe {
                 raw::crypt_keyslot_add_by_volume_key(self.cd,
-                                                     -1,
+                                                     c_keyslot,
                                                      ptr::null(),
                                                      0 as libc::size_t,
                                                      c_key.as_ptr(),
@@ -230,10 +231,14 @@ impl CryptDevice {
             }
         };
 
-        check_crypt_error!(res)
+        if res < 0 {
+            crypt_error!(res)
+        } else {
+            Ok(res as Keyslot)
+        }
     }
 
-    pub fn activate(&mut self, name: &str, key: &[u8]) -> Result<()> {
+    pub fn activate(&mut self, name: &str, key: &[u8]) -> Result<Keyslot> {
         let c_name = ffi::CString::new(name).unwrap();
         let c_passphrase_len = key.len() as libc::size_t;
 
@@ -241,13 +246,17 @@ impl CryptDevice {
             let c_passphrase = ffi::CString::from_vec_unchecked(key.to_owned());
             raw::crypt_activate_by_passphrase(self.cd,
                                               c_name.as_ptr(),
-                                              -1, // TODO constant
+                                              ANY_KEYSLOT,
                                               c_passphrase.as_ptr(),
                                               c_passphrase_len,
                                               0u32)
         };
 
-        check_crypt_error!(res)
+        if res < 0 {
+            crypt_error!(res)
+        } else {
+            Ok(res as u8)
+        }
     }
 }
 
