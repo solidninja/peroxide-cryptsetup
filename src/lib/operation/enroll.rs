@@ -2,17 +2,18 @@ use cryptsetup_rs::device::{CryptDevice, crypt_device_type};
 
 use uuid;
 
-use operation::{PerformCryptOperation, EnrollOperation, OperationError, UserDiskLookup, Result, PasswordPromptString};
+use operation::{PerformCryptOperation, EnrollOperation, OperationError, UserDiskLookup, Result, PasswordPromptString,
+                ApplyCryptDeviceOptions};
 use model::{DbEntryType, DbEntry, VolumeId};
 use io::{FileExtensions, KeyWrapper};
 use context::{WriterContext, ReaderContext, InputContext, HasDbLocation, KeyfileInput, PasswordInput, PeroxideDbReader, PeroxideDbWriter,
               DiskSelector};
 
 impl<Context, BackupContext> PerformCryptOperation for EnrollOperation<Context, BackupContext>
-    where Context: WriterContext + InputContext + DiskSelector,
+    where Context: WriterContext + InputContext + DiskSelector + ApplyCryptDeviceOptions,
           BackupContext: ReaderContext + InputContext
 {
-    fn apply(self) -> Result<()> {
+    fn apply(&self) -> Result<()> {
         try!(self.validate_entry_constraints());
         let mut devices = try!(self.context.lookup_devices(&self.device_paths_or_uuids));
         try!(self.create_new_containers(&mut devices));
@@ -28,7 +29,7 @@ impl<Context, BackupContext> PerformCryptOperation for EnrollOperation<Context, 
 
 
 impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
-    where Context: WriterContext + InputContext + DiskSelector,
+    where Context: WriterContext + InputContext + DiskSelector + ApplyCryptDeviceOptions,
           BackupContext: ReaderContext + InputContext
 {
     fn validate_entry_constraints(&self) -> Result<()> {
@@ -198,81 +199,4 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
             }
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    // TODO - create a test case for enrolment of a new disk with a new volume header
-    // TODO - create a test case for enrolment of a disk with an existing passphrase keyslot
-    // TODO - create a test case for enrolment of a disk with an existing backup keyslot
-
-    use std::path::{Path, PathBuf};
-
-    use cryptsetup_rs::device::{CryptDevice, crypt_device_type};
-    use env_logger;
-    use expectest::prelude::*;
-
-    use context::{HasDbLocation, MainContext, PeroxideDbReader};
-    use context::tests::{TemporaryDirContext, KeyfileOutput};
-    use model::{NewContainerParameters, DbType, DbEntryType, DbEntry, VolumeId};
-    use operation::{EnrollOperation, PerformCryptOperation};
-
-    #[allow(unused_variables)]
-    #[test]
-    fn test_enroll_new_device_with_keyfile() {
-        env_logger::init().unwrap();
-        CryptDevice::enable_debug(true);
-
-        let temp_context = TemporaryDirContext::new(DbType::Backup);
-        let main_context = MainContext::new(temp_context.db_location().clone());
-
-        let device_file = temp_context.new_device_file().unwrap();
-
-        let container_params = Some(NewContainerParameters {
-            cipher: "serpent-xts-plain".to_string(),
-            hash: "sha256".to_string(),
-            key_bits: 512,
-        });
-        let paths = vec![device_file.path().to_str().unwrap().to_string()];
-        let keyfile_content = vec![0xB, 0xA, 0xA, 0xA];
-        let (keyfile_path, keyfile_temp_file) = temp_context.write_keyfile(Some(Path::new("enroll_subdir")), &keyfile_content).unwrap();
-
-        let enroll_op = EnrollOperation::<MainContext, MainContext> {
-            context: main_context,
-            entry_type: DbEntryType::Keyfile,
-            new_container: container_params,
-            device_paths_or_uuids: paths,
-            iteration_ms: 10,
-            keyfile: Some(keyfile_path.to_path_buf()),
-            backup_context: None,
-            name: Some("a_name".to_string()),
-            yubikey_entry_type: None,
-            yubikey_slot: None,
-        };
-        enroll_op.apply().unwrap();
-
-        // verify the db got written correctly
-        let crypt_device = CryptDevice::new(device_file.path().to_path_buf()).unwrap();
-        expect!(crypt_device.load(crypt_device_type::LUKS1)).to(be_ok());
-        expect!(crypt_device.uuid()).to(be_some());
-
-        let db = temp_context.open_peroxide_db().unwrap();
-        expect!(db.entries.iter()).to(have_count(1));
-
-        let expected_entry = DbEntry::KeyfileEntry {
-            key_file: PathBuf::from("enroll_subdir").join(keyfile_path.file_name().and_then(|n| n.to_str()).unwrap()),
-            volume_id: VolumeId::new(Some("a_name".to_string()), crypt_device.uuid().unwrap()),
-        };
-
-        expect!(db.entries.first()).to(be_some().value(&expected_entry));
-
-        // verify crypt device got setup correctly
-        expect!(crypt_device.cipher()).to(be_some().value("serpent"));
-        expect!(crypt_device.cipher_mode()).to(be_some().value("xts-plain"));
-        expect!(crypt_device.volume_key_size()).to(be_some().value(64));
-
-        // TODO - try to verify the keyslot parameters but there's no api it seems
-    }
-
-
 }

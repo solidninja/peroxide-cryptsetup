@@ -2,7 +2,7 @@ use std::path;
 use uuid::Uuid;
 use std::option::Option;
 
-#[derive(RustcDecodable, Serialize, Deserialize, Debug, Clone)]
+#[derive(RustcDecodable, Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum DbType {
 	Operation,
 	Backup,
@@ -16,16 +16,17 @@ pub struct PeroxideDb {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum DbEntryType {
 	Keyfile,
 	Passphrase,
 	Yubikey,
 }
 
+// FIXME move this to newtype
 pub type YubikeySlot = u8;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
 pub enum YubikeyEntryType {
 	ChallengeResponse,
 	HybridChallengeResponse,
