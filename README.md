@@ -86,6 +86,14 @@ Options:
 
 There's no official roadmap, but have a look in [TASKS.todo](TASKS.todo) for a list of current tasks.
 
+## Development
+
+You will require the following packages installed:
+
+* `libsodium-devel`
+* `ykpers-devel`
+FIXME
+
 ## Contributing
 
 `peroxide-cryptsetup` is the work of its contributors and is a free software project licensed under the 

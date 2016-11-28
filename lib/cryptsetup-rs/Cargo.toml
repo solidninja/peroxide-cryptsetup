@@ -8,10 +8,10 @@ license = "LGPL-3.0"
 name = "cryptsetup_rs"
 
 [dependencies]
-libc = "*"
-errno = "*"
-uuid = "*"
-log = "*"
+libc = "0.2"
+errno = "0.2"
+uuid = "0.3"
+log = "0.3"
 
 [dependencies.libcryptsetup-sys]
 version = "0.1.0"
@@ -22,9 +22,9 @@ version = "0.1.0"
 path = "blkid-rs"
 
 [dev-dependencies]
-env_logger = "*"
-tempdir = "*"
-expectest = "*"
+env_logger = "0.3"
+tempdir = "0.3"
+expectest = "0.3"
 
 [[test]]
 name = "tests"

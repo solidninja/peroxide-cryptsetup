@@ -16,23 +16,14 @@ pub type Result<T> = result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
-    KeyfileInputError {
-        cause: io::Error,
-    },
-    PasswordInputError {
-        cause: io::Error,
-    },
-    DatabaseIoError {
-        path: PathBuf,
-        cause: io::Error,
-    },
+    KeyfileInputError { cause: io::Error },
+    PasswordInputError { cause: io::Error },
+    DatabaseIoError { path: PathBuf, cause: io::Error },
     DiskIoError {
         path: Option<PathBuf>,
         cause: io::Error,
     },
-    YubikeyError {
-        message: String,
-    },
+    YubikeyError { message: String },
     UnknownCryptoError,
     FeatureNotAvailable,
 }
@@ -162,7 +153,7 @@ impl PeroxideDbWriter for MainContext {
 }
 
 pub trait ReaderContext: HasDbLocation + PeroxideDbReader {}
-pub trait WriterContext: ReaderContext + PeroxideDbWriter { }
+pub trait WriterContext: ReaderContext + PeroxideDbWriter {}
 pub trait InputContext: KeyfileInput + PasswordInput + YubikeyInput {}
 
 impl ReaderContext for MainContext {}
