@@ -1,7 +1,7 @@
 include!(concat!(env!("OUT_DIR"), "/db.rs"));
 
 use std::io;
-use std::io::{Error, Read, Write};
+use std::io::{Read, Write};
 use serde_json;
 
 pub const DB_VERSION: u16 = 1;
@@ -45,3 +45,5 @@ impl DbEntry {
         &self.volume_id().id.uuid
     }
 }
+
+// TODO: Write tests for the serialization

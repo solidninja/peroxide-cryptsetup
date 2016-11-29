@@ -171,7 +171,7 @@ impl CryptDevice {
         let c_cipher = ffi::CString::new(cipher).unwrap();
         let c_cipher_mode = ffi::CString::new(cipher_mode).unwrap();
         let c_hash = ffi::CString::new(hash).unwrap();
-        let c_uuid = maybe_uuid.map(|uuid| ffi::CString::new(uuid.to_hyphenated_string()).unwrap());
+        let c_uuid = maybe_uuid.map(|uuid| ffi::CString::new(uuid.hyphenated().to_string()).unwrap());
 
         let mut luks_params = raw::crypt_params_luks1 {
             hash: c_hash.as_ptr(),

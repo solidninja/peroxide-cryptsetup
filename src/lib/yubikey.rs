@@ -7,7 +7,9 @@ use io::KeyWrapper;
 use io::yubikey;
 
 
-pub trait AcquireYubikey where Self::Device: Yubikey + ChallengeResponse + Sized {
+pub trait AcquireYubikey
+    where Self::Device: Yubikey + ChallengeResponse + Sized
+{
     type Device;
 
     fn acquire_device() -> Result<Self::Device>;
@@ -21,7 +23,8 @@ impl AcquireYubikey for MainContext {
 }
 
 
-impl<T> YubikeyInput for T where T: PasswordInput + AcquireYubikey
+impl<T> YubikeyInput for T
+    where T: PasswordInput + AcquireYubikey
 {
     fn read_yubikey(&self, name: Option<&str>, uuid: &Uuid, slot: YubikeySlot, entry_type: YubikeyEntryType) -> Result<KeyWrapper> {
         let mut dev = try!(Self::acquire_device());
@@ -59,17 +62,17 @@ fn read_challenge_response<Dev: ChallengeResponse>(dev: &mut Dev,
     println!("Please interact with the Yubikey now...");
     let mut response = [0u8; SHA1_BLOCK_LENGTH];
     dev.challenge_response(params, &challenge, &mut response)
-       .map(|_| {
-           // FIXME: wait until copy_memory or similar is stable
-           let mut fix_response = [0u8; SHA1_RESPONSE_LENGTH];
-           {
-               for (i, b) in response.iter().take(SHA1_RESPONSE_LENGTH).enumerate() {
-                   fix_response[i] = *b;
-               }
-           }
-           fix_response
-       })
-       .map_err(|err| Error::YubikeyError { message: format!("Failed Yubikey challenge-response: {:?}", err) })
+        .map(|_| {
+            // FIXME: wait until copy_memory or similar is stable
+            let mut fix_response = [0u8; SHA1_RESPONSE_LENGTH];
+            {
+                for (i, b) in response.iter().take(SHA1_RESPONSE_LENGTH).enumerate() {
+                    fix_response[i] = *b;
+                }
+            }
+            fix_response
+        })
+        .map_err(|err| Error::YubikeyError { message: format!("Failed Yubikey challenge-response: {:?}", err) })
 }
 
 #[cfg(not(feature = "yubikey_hybrid"))]

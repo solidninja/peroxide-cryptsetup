@@ -6,8 +6,7 @@ use operation::{PerformCryptOperation, EnrollOperation, OperationError, UserDisk
                 ApplyCryptDeviceOptions};
 use model::{DbEntryType, DbEntry, VolumeId};
 use io::{FileExtensions, KeyWrapper};
-use context::{WriterContext, ReaderContext, InputContext, HasDbLocation, KeyfileInput, PasswordInput, PeroxideDbReader, PeroxideDbWriter,
-              DiskSelector};
+use context::{WriterContext, ReaderContext, InputContext, DiskSelector};
 
 impl<Context, BackupContext> PerformCryptOperation for EnrollOperation<Context, BackupContext>
     where Context: WriterContext + InputContext + DiskSelector + ApplyCryptDeviceOptions,
@@ -18,11 +17,11 @@ impl<Context, BackupContext> PerformCryptOperation for EnrollOperation<Context, 
         let mut devices = try!(self.context.lookup_devices(&self.device_paths_or_uuids));
         try!(self.create_new_containers(&mut devices));
         let devices_with_entries = devices.into_iter()
-                                          .map(|device| {
-                                              let entry = self.get_preexisting_entry(&device);
-                                              (device, entry)
-                                          })
-                                          .collect::<Vec<_>>();
+            .map(|device| {
+                let entry = self.get_preexisting_entry(&device);
+                (device, entry)
+            })
+            .collect::<Vec<_>>();
         self.enroll_devices_with_entries(devices_with_entries)
     }
 }
@@ -46,11 +45,11 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
             DbEntryType::Keyfile => {
                 let keyfile = self.keyfile.as_ref().unwrap();
                 db_loc.relative_path(keyfile)
-                      .ok_or_else(|| {
-                          OperationError::ValidationFailed(format!("The database directory did not contain the key file '{}'",
-                                                                   keyfile.display()))
-                      })
-                      .map(|_| ())
+                    .ok_or_else(|| {
+                        OperationError::ValidationFailed(format!("The database directory did not contain the key file '{}'",
+                                                                 keyfile.display()))
+                    })
+                    .map(|_| ())
             }
             _ => Ok(()),
         });
@@ -72,27 +71,26 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
                         assert!(cipher_split.len() == 2);
 
                         crypt_device.format_luks(cipher_split[0],
-                                                 cipher_split[1],
-                                                 &params.hash,
-                                                 params.key_bits,
-                                                 None)
-                                    .map_err(|err| From::from((crypt_device.path.as_path(), err)))
+                                         cipher_split[1],
+                                         &params.hash,
+                                         params.key_bits,
+                                         None)
+                            .map_err(|err| From::from((crypt_device.path.as_path(), err)))
                     }
                 })
                 .unwrap_or(Ok(()))
         };
 
         devices.iter_mut()
-               .map(create_container)
-               .collect::<Result<Vec<_>>>()
-               .map(|_| ())  // TODO better?
+            .map(create_container)
+            .collect::<Result<Vec<_>>>()
+            .map(|_| ())  // TODO better?
     }
 
     fn get_preexisting_entry(&self, device: &CryptDevice) -> Option<DbEntry> {
         if self.new_container.is_some() {
             None
         } else {
-            // FIXME remove unimplemented!()
             device.load(crypt_device_type::LUKS1).unwrap();
             // if there is no backup db or backup db open/lookup failed, use a passphrase entry
             self.backup_context
@@ -100,9 +98,9 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
                 .and_then(|ctx| ctx.open_peroxide_db().ok())
                 .and_then(|db| {
                     db.entries
-                      .iter()
-                      .find(|e| e.uuid() == &device.uuid().unwrap())
-                      .map(|e| e.clone())
+                        .iter()
+                        .find(|e| e.uuid() == &device.uuid().unwrap())
+                        .map(|e| e.clone())
                 })
                 .or_else(|| Some(DbEntry::PassphraseEntry { volume_id: VolumeId::new(None, device.uuid().unwrap().clone()) }))
         }
@@ -124,9 +122,9 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
 
             // enroll
             try!(cd.add_keyslot(new_key.as_slice(),
-                                maybe_previous_key.as_ref().map(|k| k.as_slice()),
-                                None)
-                   .map_err(|e| OperationError::from((&cd.path, e))));
+                             maybe_previous_key.as_ref().map(|k| k.as_slice()),
+                             None)
+                .map_err(|e| OperationError::from((&cd.path, e))));
 
             // create db entry
             Ok(self.create_new_entry(volume_id))
@@ -134,8 +132,8 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
 
         let mut devs = devices_with_entries;  // FIXME mutability hack
         let new_entries = try!(devs.iter_mut()
-                                   .map(|&mut (ref mut device, ref mut entry)| enroll_device(device, entry.as_ref()))
-                                   .collect::<Result<Vec<_>>>());
+            .map(|&mut (ref mut device, ref mut entry)| enroll_device(device, entry.as_ref()))
+            .collect::<Result<Vec<_>>>());
 
         // add all entries and save
         db.entries.extend(new_entries);
@@ -144,41 +142,41 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
 
     fn get_previous_key_wrapper(&self, entry: Option<&DbEntry>) -> Result<Option<KeyWrapper>> {
         entry.map(|previous_entry| {
-                 match previous_entry {
-                     &DbEntry::PassphraseEntry { ref volume_id } => self.context.read_password(&volume_id.prompt_string()),
-                     &DbEntry::KeyfileEntry { ref key_file, .. } => {
-                         self.backup_context.as_ref().map(|ctx| ctx.read_keyfile(&key_file)).unwrap()
-                     }
-                     &DbEntry::YubikeyEntry { ref slot, ref entry_type, ref volume_id} => {
-                         self.backup_context
-                             .as_ref()
-                             .map(|ctx| {
-                                 ctx.read_yubikey(Some(&volume_id.prompt_name()),
-                                                  &volume_id.id.uuid,
-                                                  slot.clone(),
-                                                  entry_type.clone())
-                             })
-                             .unwrap()
-                     }
-                 }
-                 .map_err(OperationError::from)
-                 .map(|k| Some(k))
-             })
-             .unwrap_or(Ok(None))
+                match previous_entry {
+                        &DbEntry::PassphraseEntry { ref volume_id } => self.context.read_password(&volume_id.prompt_string()),
+                        &DbEntry::KeyfileEntry { ref key_file, .. } => {
+                            self.backup_context.as_ref().map(|ctx| ctx.read_keyfile(&key_file)).unwrap()
+                        }
+                        &DbEntry::YubikeyEntry { ref slot, ref entry_type, ref volume_id } => {
+                            self.backup_context
+                                .as_ref()
+                                .map(|ctx| {
+                                    ctx.read_yubikey(Some(&volume_id.prompt_name()),
+                                                     &volume_id.id.uuid,
+                                                     slot.clone(),
+                                                     entry_type.clone())
+                                })
+                                .unwrap()
+                        }
+                    }
+                    .map_err(OperationError::from)
+                    .map(|k| Some(k))
+            })
+            .unwrap_or(Ok(None))
     }
 
     fn get_new_key_wrapper(&self, uuid: &uuid::Uuid) -> Result<KeyWrapper> {
         match self.entry_type {
-            DbEntryType::Passphrase => self.context.read_password("Please enter new passphrase:"),
-            DbEntryType::Keyfile => self.keyfile.as_ref().map(|keyfile| self.context.read_keyfile(keyfile)).unwrap(),
-            DbEntryType::Yubikey => {
-                self.context.read_yubikey(None,
-                                          uuid,
-                                          self.yubikey_slot.as_ref().unwrap().clone(),
-                                          self.yubikey_entry_type.as_ref().unwrap().clone())
+                DbEntryType::Passphrase => self.context.read_password("Please enter new passphrase:"),
+                DbEntryType::Keyfile => self.keyfile.as_ref().map(|keyfile| self.context.read_keyfile(keyfile)).unwrap(),
+                DbEntryType::Yubikey => {
+                    self.context.read_yubikey(None,
+                                              uuid,
+                                              self.yubikey_slot.as_ref().unwrap().clone(),
+                                              self.yubikey_entry_type.as_ref().unwrap().clone())
+                }
             }
-        }
-        .map_err(OperationError::from)
+            .map_err(OperationError::from)
     }
 
     fn create_new_entry(&self, volume_id: VolumeId) -> DbEntry {

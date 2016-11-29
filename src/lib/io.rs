@@ -89,15 +89,15 @@ impl Disks {
         // assume udev
         fs::read_dir(Path::new(DISK_BY_UUID)).and_then(|entries| {
             entries.map(|entry| {
-                       entry.map(|e| e.path())
-                            .and_then(|p| Disks::parse_uuid_from(&p).ok_or(Error::new(ErrorKind::Other, "Uuid parsing failed")))
-                   })
-                   .collect()
+                    entry.map(|e| e.path())
+                        .and_then(|p| Disks::parse_uuid_from(&p).ok_or(Error::new(ErrorKind::Other, "Uuid parsing failed")))
+                })
+                .collect()
         })
     }
 
     pub fn disk_uuid_path(uuid: &uuid::Uuid) -> io::Result<PathBuf> {
-        let path = Path::new(DISK_BY_UUID).join(uuid.to_hyphenated_string());
+        let path = Path::new(DISK_BY_UUID).join(uuid.hyphenated().to_string());
 
         fs::metadata(&path).and_then(|meta| {
             if meta.is_file() {
