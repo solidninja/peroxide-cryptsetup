@@ -1,7 +1,6 @@
 use cryptsetup_rs::device::{crypt_device_type, CryptDevice, Keyslot};
 
 
-use context::{DiskSelector, KeyfileInput, PeroxideDbReader};
 use context;
 use io::Disks;
 use model::{DbEntry, VolumeId};
@@ -15,14 +14,14 @@ struct NamingContext {
 impl NamingContext {
     fn device_name(&self, given_name: Option<&String>, volume_id: &VolumeId) -> String {
         given_name.or(volume_id.name.as_ref())
-                  .map(|name| {
-                      if !self.is_single_device {
-                          format!("{}_{}", name, self.device_index)
-                      } else {
-                          name.clone()
-                      }
-                  })
-                  .unwrap_or_else(|| format!("uuid_{}", volume_id.id.uuid))
+            .map(|name| {
+                if !self.is_single_device {
+                    format!("{}_{}", name, self.device_index)
+                } else {
+                    name.clone()
+                }
+            })
+            .unwrap_or_else(|| format!("uuid_{}", volume_id.id.uuid))
     }
 }
 
@@ -36,35 +35,32 @@ impl<Context> PerformCryptOperation for OpenOperation<Context>
         let devices = try!(self.context.lookup_devices(&self.device_paths_or_uuids));
 
         let mut devices_with_entries = try!(devices.into_iter()
-                                                   .enumerate()
-                                                   .map(|(idx, device)| {
-                                                       if let Err(err) = device.load(crypt_device_type::LUKS1) {
-                                                           Err(From::from((device.path.clone(), err)))
-                                                       } else {
-                                                           let single_device = self.device_paths_or_uuids.len() == 1;
-                                                           let name_ctx = NamingContext {
-                                                               is_single_device: single_device,
-                                                               device_index: idx,
-                                                           };
-                                                           let uuid = device.uuid().unwrap();
-                                                           let maybe_entry =
-                                                               db.entries
-                                                                 .iter()
-                                                                 .find(|e| e.uuid() == &uuid)
-                                                                 .ok_or_else(|| {
-                                                                     OperationError::NotFoundInDb(format!("Uuid {} not found in db", uuid))
-                                                                 });
+            .enumerate()
+            .map(|(idx, device)| {
+                if let Err(err) = device.load(crypt_device_type::LUKS1) {
+                    Err(From::from((device.path.clone(), err)))
+                } else {
+                    let single_device = self.device_paths_or_uuids.len() == 1;
+                    let name_ctx = NamingContext {
+                        is_single_device: single_device,
+                        device_index: idx,
+                    };
+                    let uuid = device.uuid().unwrap();
+                    let maybe_entry = db.entries
+                        .iter()
+                        .find(|e| e.uuid() == &uuid)
+                        .ok_or_else(|| OperationError::NotFoundInDb(format!("Uuid {} not found in db", uuid)));
 
-                                                           maybe_entry.and_then(|entry| self.validate_open_entry(entry, &name_ctx))
-                                                                      .map(|entry| (device, entry, name_ctx))
-                                                       }
-                                                   })
-                                                   .collect::<Result<Vec<_>>>());
+                    maybe_entry.and_then(|entry| self.validate_open_entry(entry, &name_ctx))
+                        .map(|entry| (device, entry, name_ctx))
+                }
+            })
+            .collect::<Result<Vec<_>>>());
 
         devices_with_entries.iter_mut()
-                            .map(|&mut (ref mut device, ref entry, ref name_ctx)| self.open_entry(device, entry, name_ctx))
-                            .collect::<Result<Vec<_>>>()
-                            .map(|_| ())  // TODO better pattern?
+            .map(|&mut (ref mut device, ref entry, ref name_ctx)| self.open_entry(device, entry, name_ctx))
+            .collect::<Result<Vec<_>>>()
+            .map(|_| ())  // TODO better pattern?
     }
 }
 
@@ -140,7 +136,7 @@ pub mod tests {
     fn test_device_name_uuid_fallback() {
         let uuid = Uuid::new_v4();
         let volume_id = VolumeId::new(None, uuid);
-        let expected_name = format!("uuid_{}", uuid.to_hyphenated_string());
+        let expected_name = format!("uuid_{}", uuid.hyphenated().to_string());
 
         let single_context = NamingContext {
             is_single_device: true,

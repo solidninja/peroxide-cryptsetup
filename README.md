@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/solidninja/peroxide-cryptsetup.png?branch=master)](https://travis-ci.org/solidninja/peroxide-cryptsetup)
+[![crates.io Status](https://img.shields.io/crates/v/peroxide-cryptsetup.svg)](https://crates.io/crates/peroxide-cryptsetup)
 
 _**peroxide-cryptsetup**_
 
@@ -17,6 +18,10 @@ lost. It only supports LUKS devices currently.
 ## Usage
 
 Documentation is currently a bit light, but this will get you started:
+
+* `cargo install peroxide-cryptsetup`
+
+Alternatively, pull this repository and build from source:
 
  * `cargo build`
  * now `target/debug/peroxs` will be simply referred to as `peroxs`
@@ -85,6 +90,14 @@ Options:
 ## Roadmap
 
 There's no official roadmap, but have a look in [TASKS.todo](TASKS.todo) for a list of current tasks.
+
+## Development
+
+You will require the following packages installed:
+
+* `libsodium-devel`
+* `ykpers-devel`
+FIXME
 
 ## Contributing
 

@@ -2,14 +2,17 @@
 name = "blkid-rs"
 version = "0.1.0"
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
+description = "Rust implementation of blkid for LUKS volumes"
+license = "LGPL-3.0"
+homepage = "https://github.com/solidninja/peroxide-cryptsetup"
 
 [lib]
 name = "blkid_rs"
 
 [dependencies]
-byteorder = "*"
-uuid = "*"
+byteorder = "0.5"
+uuid = "0.3"
 
 [dev-dependencies]
-env_logger = "*"
-tempdir = "*"
+env_logger = "0.3"
+tempdir = "0.3"

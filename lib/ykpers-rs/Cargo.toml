@@ -3,20 +3,22 @@ name = "ykpers-rs"
 version = "0.1.0"
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
 license = "LGPL-3.0"
+description = "Rust wrapper around the Yubikey-personalization library, allowing interaction with Yubikey hardware"
+homepage = "https://github.com/solidninja/peroxide-cryptsetup"
 
 [lib]
 name = "ykpers_rs"
 
 [dependencies]
-libc = "*"
-errno = "*"
-log = "*"
+libc = "0.2"
+errno = "0.2"
+log = "0.3"
 libykpers-sys = { path = "libykpers-sys", version = "0.1.0" }
 
 [dev-dependencies]
-env_logger = "*"
-tempdir = "*"
-expectest = "*"
+env_logger = "0.3"
+tempdir = "0.3"
+expectest = "0.6"
 
 # [[test]]
 # name = "tests"
