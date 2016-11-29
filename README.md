@@ -104,4 +104,4 @@ FIXME
 `peroxide-cryptsetup` is the work of its contributors and is a free software project licensed under the 
 GPLv3 or later. 
 
-If you would like to contribute, please follow the [C4](http://rfc.zeromq.org/spec:22) process. 
+If you would like to contribute, please follow the [C4](https://rfc.zeromq.org/spec:42/C4/) process. 
