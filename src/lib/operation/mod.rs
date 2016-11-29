@@ -206,19 +206,20 @@ impl ApplyCryptDeviceOptions for context::MainContext {
     }
 }
 
-impl<C> UserDiskLookup for C where C: context::DiskSelector + ApplyCryptDeviceOptions
+impl<C> UserDiskLookup for C
+    where C: context::DiskSelector + ApplyCryptDeviceOptions
 {
     fn resolve_paths_or_uuids<'a>(&self, paths_or_uuids: &'a [String]) -> HashMap<&'a String, context::Result<PathBuf>> {
         paths_or_uuids.iter()
-                      .map(|s| (s, PathOrUuid::from_str(s).unwrap()))
-                      .map(|(s, path_or_uuid)| {
-                          (s,
-                           match path_or_uuid {
-                              PathOrUuid::Path(path) => Ok(path),
-                              PathOrUuid::Uuid(uuid) => self.disk_uuid_path(&uuid),
-                          })
-                      })
-                      .collect()
+            .map(|s| (s, PathOrUuid::from_str(s).unwrap()))
+            .map(|(s, path_or_uuid)| {
+                (s,
+                 match path_or_uuid {
+                     PathOrUuid::Path(path) => Ok(path),
+                     PathOrUuid::Uuid(uuid) => self.disk_uuid_path(&uuid),
+                 })
+            })
+            .collect()
     }
 
     fn lookup_devices<'a>(&self, paths_or_uuids: &'a [String]) -> Result<Vec<CryptDevice>> {

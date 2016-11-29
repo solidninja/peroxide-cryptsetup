@@ -63,13 +63,13 @@ mod imp {
 
 	impl serde::Serialize for VolumeUuid {
 		fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> where S: serde::Serializer {
-			serializer.visit_str(&self.uuid.to_hyphenated_string())
+			serializer.serialize_str(&self.uuid.hyphenated().to_string())
 		}
 	} 
 
 	impl serde::Deserialize for VolumeUuid {
 		fn deserialize<D>(deserializer: &mut D) -> Result<VolumeUuid, D::Error> where D: serde::Deserializer {
-			deserializer.visit(VolumeUuidVisitor)
+			deserializer.deserialize_str(VolumeUuidVisitor)
 		}
 	}
 
@@ -81,7 +81,7 @@ mod imp {
 		fn visit_str<E>(&mut self, value: &str) -> Result<VolumeUuid, E> where E: serde::de::Error {
 			match Uuid::parse_str(value) {
 				Ok(parsed) => Ok(VolumeUuid { uuid: parsed }), 
-				Err(reason) =>  Err(serde::de::Error::syntax(&format!("{}", reason)))
+				Err(reason) =>  Err(E::invalid_value(&format!("{}", reason)))
 			}
 		}
 	}

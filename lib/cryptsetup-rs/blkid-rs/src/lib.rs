@@ -66,7 +66,7 @@ impl convert::From<io::Error> for Error {
         Error::ReadError(error)
     }
 }
-
+/* FIXME
 impl convert::From<byteorder::Error> for Error {
     fn from(error: byteorder::Error) -> Error {
         match error {
@@ -75,6 +75,7 @@ impl convert::From<byteorder::Error> for Error {
         }
     }
 }
+*/
 
 mod raw {
     #![allow(non_snake_case)]

@@ -92,7 +92,7 @@ fn _guess_db_path() -> io::Result<PathBuf> {
 
 fn get_db_path(arg_db: Option<PathBuf>) -> io::Result<PathBuf> {
     arg_db.map(|p| Ok(p.clone()))
-          .unwrap_or_else(_guess_db_path)
+        .unwrap_or_else(_guess_db_path)
 }
 
 fn get_db_type<P: AsRef<Path>>(db_path: &P) -> io::Result<DbType> {
@@ -104,7 +104,7 @@ fn get_db_type<P: AsRef<Path>>(db_path: &P) -> io::Result<DbType> {
 fn get_db_location(at_path: Option<PathBuf>, maybe_db_type: Option<&DbType>) -> io::Result<DbLocation> {
     let db_path = try!(get_db_path(at_path));
     let db_type = try!(maybe_db_type.map(|t| Ok(t.clone()))
-                                    .unwrap_or_else(|| get_db_type(&db_path)));
+        .unwrap_or_else(|| get_db_type(&db_path)));
     Ok(DbLocation {
         path: db_path,
         db_type: db_type,
@@ -194,7 +194,7 @@ fn get_operation(args: &Args) -> CryptOperation {
     println!("{:?}", args);
     let db_location = get_db_location(args.arg_db.as_ref().map(PathBuf::from),
                                       args.arg_db_type.as_ref())
-                          .unwrap_or_else(|err| panic!("expecting db location, error: {}", err));
+        .unwrap_or_else(|err| panic!("expecting db location, error: {}", err));
     let context = MainContext::new(db_location);
     let maybe_paths = args.arg_device_or_uuid.clone();
 
@@ -213,8 +213,8 @@ fn run_peroxs() -> i32 {
     MainContext::trace_on();
 
     let args: Args = Docopt::new(USAGE)
-                         .and_then(|d| d.decode())
-                         .unwrap_or_else(|e| e.exit());
+        .and_then(|d| d.decode())
+        .unwrap_or_else(|e| e.exit());
 
     if let Err(reason) = get_operation(&args).perform() {
         println!("ERROR: {}", reason);
