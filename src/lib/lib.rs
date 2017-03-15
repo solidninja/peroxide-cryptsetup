@@ -10,7 +10,6 @@ extern crate errno;
 extern crate termios;
 extern crate libc;
 
-#[macro_use]
 extern crate log;
 
 pub mod db;

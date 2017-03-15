@@ -6,13 +6,13 @@ use std::fs;
 use model::DbLocation;
 use uuid;
 
-pub type Result<T> = io::Result<T>;
 pub use io::unsafe_passphrase::TerminalPrompt;
 
 // the below assume udev or udev-like /dev layout
 const DISK_BY_UUID: &'static str = "/dev/disk/by-uuid";
 const DEV_MAPPER: &'static str = "/dev/mapper";
 
+const UUID_LENGTH: usize = 36;
 
 // TODO - look into libraries like common.rs for better secure buffer management
 #[derive(PartialEq, Eq)]
@@ -88,7 +88,9 @@ impl Disks {
     pub fn all_disk_uuids() -> io::Result<Vec<uuid::Uuid>> {
         // assume udev
         fs::read_dir(Path::new(DISK_BY_UUID)).and_then(|entries| {
-            entries.map(|entry| {
+            entries
+                .filter(Disks::has_full_uuid)
+                .map(|entry| {
                     entry.map(|e| e.path())
                         .and_then(|p| Disks::parse_uuid_from(&p).ok_or(Error::new(ErrorKind::Other, "Uuid parsing failed")))
                 })
@@ -114,6 +116,12 @@ impl Disks {
         fs::metadata(&path)
             .map(|meta| !meta.is_dir())
             .unwrap_or(false)
+    }
+
+    // FAT32/NTFS disks do not have a UUID of the proper length - exclude them as they cannot be
+    // LUKS disks
+    fn has_full_uuid(e: &io::Result<fs::DirEntry>) -> bool {
+        e.as_ref().map(|entry| entry.path().file_name().unwrap().len() == UUID_LENGTH).unwrap_or(false)
     }
 }
 
