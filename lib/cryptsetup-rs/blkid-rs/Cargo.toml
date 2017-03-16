@@ -11,7 +11,7 @@ name = "blkid_rs"
 
 [dependencies]
 byteorder = "0.5"
-uuid = "0.3"
+uuid = "0.4"
 
 [dev-dependencies]
 env_logger = "0.3"

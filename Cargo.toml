@@ -1,6 +1,6 @@
 [package]
 name = "peroxide-cryptsetup"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
 license = "GPL-3.0"
 description = "Command-line utility for managing LUKS encrypted volumes using 2FA methods (for example Yubikeys)"
@@ -9,23 +9,18 @@ homepage = "https://github.com/solidninja/peroxide-cryptsetup"
 readme = "README.md"
 keywords = ["cli", "cryptsetup", "luks"]
 
-build = "build.rs"
-
 [features]
 default = ["yubikey", "yubikey_hybrid"]
 yubikey = ["ykpers-rs"]
 yubikey_hybrid = ["yubikey", "sodiumoxide"]
 
-[build-dependencies]
-syntex = "0.50"
-serde_codegen = { version = "0.8", features = ["with-syntex"] }
-
 [dependencies]
 docopt = "0.6"
 rustc-serialize = "0.3"
-serde = "0.8"
-serde_json = "0.8"
-uuid = { version = "0.3", features = ["serde", "v4"] }
+serde = "0.9"
+serde_derive = "0.9"
+serde_json = "0.9"
+uuid = { version = "0.4", features = ["serde", "v4"] }
 errno = "0.2"
 sodiumoxide = { version = "0.0", optional = true }
 
@@ -35,7 +30,7 @@ env_logger = "0.3"
 termios = "0.2"
 libc = "0.2"
 
-cryptsetup-rs = { version = "0.1.0", path = "lib/cryptsetup-rs" }
+cryptsetup-rs = { version = "0.1.1", path = "lib/cryptsetup-rs" }
 ykpers-rs = { version = "0.1.0", path = "lib/ykpers-rs", optional = true }
 
 [dev-dependencies]

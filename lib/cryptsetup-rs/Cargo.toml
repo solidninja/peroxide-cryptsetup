@@ -1,6 +1,6 @@
 [package]
 name = "cryptsetup-rs"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
 license = "LGPL-3.0"
 description = "Rust wrapper around the libcryptsetup library, allowing manipulation of LUKS devices in Linux"
@@ -12,7 +12,7 @@ name = "cryptsetup_rs"
 [dependencies]
 libc = "0.2"
 errno = "0.2"
-uuid = "0.3"
+uuid = "0.4"
 log = "0.3"
 
 [dependencies.libcryptsetup-sys]

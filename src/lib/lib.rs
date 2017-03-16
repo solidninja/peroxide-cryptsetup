@@ -1,7 +1,9 @@
 #![deny(warnings)]
 #[warn(unused_must_use)]
 
-extern crate rustc_serialize;
+#[macro_use]
+extern crate serde_derive;
+
 extern crate serde;
 extern crate serde_json;
 extern crate uuid;

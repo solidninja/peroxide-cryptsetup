@@ -1,12 +1,69 @@
-include!(concat!(env!("OUT_DIR"), "/db.rs"));
-
 use std::io;
 use std::io::{Read, Write};
+use std::path;
+
+use uuid::Uuid;
+
 use serde_json;
 
 pub const DB_VERSION: u16 = 1;
 
 pub type Result<T> = io::Result<T>;
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub enum DbType {
+	Operation,
+	Backup,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PeroxideDb {
+	pub entries: Vec<DbEntry>,
+	pub db_type: DbType,
+	pub version: u16,
+}
+
+
+#[derive(Debug, Clone, Copy)]
+pub enum DbEntryType {
+	Keyfile,
+	Passphrase,
+	Yubikey,
+}
+
+// FIXME move this to newtype
+pub type YubikeySlot = u8;
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
+pub enum YubikeyEntryType {
+	ChallengeResponse,
+	HybridChallengeResponse,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub enum DbEntry {
+	KeyfileEntry { key_file: path::PathBuf, volume_id: VolumeId },
+	PassphraseEntry { volume_id: VolumeId },
+	YubikeyEntry { entry_type: YubikeyEntryType, slot: YubikeySlot, volume_id: VolumeId },
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct VolumeId {
+	pub name: Option<String>,
+	pub id: VolumeUuid
+}
+
+impl VolumeId {
+	pub fn new(name: Option<String>, uuid: Uuid) -> VolumeId {
+		VolumeId { name: name, id: VolumeUuid { uuid: uuid } }
+	}
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct VolumeUuid {
+	pub uuid: Uuid
+}
+
 
 impl PeroxideDb {
     pub fn new(db_type: DbType) -> PeroxideDb {

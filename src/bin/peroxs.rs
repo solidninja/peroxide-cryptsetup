@@ -70,7 +70,7 @@ struct Args {
     cmd_hybrid: bool,
     cmd_at: bool,
     arg_db: Option<String>,
-    arg_db_type: Option<DbType>,
+    arg_db_type: Option<String>,
     arg_device_or_uuid: Option<Vec<String>>,
     arg_keyfile: Option<String>,
     flag_version: bool, // TODO - implement!
@@ -190,10 +190,13 @@ fn _open_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<St
 }
 
 fn get_operation(args: &Args) -> CryptOperation {
-    // TODO: remove this line
-    println!("{:?}", args);
+    let db_type = args.arg_db_type.as_ref().map(|s| match s.as_ref() {
+        "operation" => DbType::Operation,
+        "backup" => DbType::Backup,
+        _ => panic!("Unknown db_type!")
+    });
     let db_location = get_db_location(args.arg_db.as_ref().map(PathBuf::from),
-                                      args.arg_db_type.as_ref())
+                                      db_type.as_ref())
         .unwrap_or_else(|err| panic!("expecting db location, error: {}", err));
     let context = MainContext::new(db_location);
     let maybe_paths = args.arg_device_or_uuid.clone();
