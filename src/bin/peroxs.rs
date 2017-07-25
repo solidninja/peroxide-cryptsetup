@@ -1,9 +1,11 @@
 #![deny(warnings)]
 #[warn(unused_must_use)]
 
-extern crate rustc_serialize;
 extern crate docopt;
 extern crate peroxide_cryptsetup;
+
+#[macro_use]
+extern crate serde_derive;
 
 // TODO - improve the logging story?
 extern crate env_logger;
@@ -57,8 +59,7 @@ Options:
     -S <slot>, --slot <slot>                Slot in Yubikey to use
 ";
 
-// FIXME: Adding :PathBuf below causes breakage, why?
-#[derive(RustcDecodable, Debug)]
+#[derive(Deserialize, Debug)]
 struct Args {
     cmd_init: bool,
     cmd_enroll: bool,
@@ -216,7 +217,7 @@ fn run_peroxs() -> i32 {
     MainContext::trace_on();
 
     let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
+        .and_then(|d| d.argv(env::args().into_iter()).deserialize())
         .unwrap_or_else(|e| e.exit());
 
     if let Err(reason) = get_operation(&args).perform() {

@@ -10,9 +10,9 @@ homepage = "https://github.com/solidninja/peroxide-cryptsetup"
 name = "blkid_rs"
 
 [dependencies]
-byteorder = "0.5"
-uuid = "0.4"
+byteorder = "1.1"
+uuid = "0.5"
 
 [dev-dependencies]
-env_logger = "0.3"
+env_logger = "0.4"
 tempdir = "0.3"
