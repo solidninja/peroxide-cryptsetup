@@ -1,3 +1,4 @@
+use std::cmp;
 use std::io;
 use std::io::{Read, Write};
 use std::path;
@@ -47,7 +48,7 @@ pub enum DbEntry {
 	YubikeyEntry { entry_type: YubikeyEntryType, slot: YubikeySlot, volume_id: VolumeId },
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 pub struct VolumeId {
 	pub name: Option<String>,
 	pub id: VolumeUuid
@@ -59,11 +60,22 @@ impl VolumeId {
 	}
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct VolumeUuid {
 	pub uuid: Uuid
 }
 
+impl cmp::Ord for VolumeUuid {
+    fn cmp(&self, other: &VolumeUuid) -> cmp::Ordering {
+        self.uuid.cmp(&other.uuid)
+    }
+}
+
+impl cmp::PartialOrd for VolumeUuid {
+    fn partial_cmp(&self, other: &VolumeUuid) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 impl PeroxideDb {
     pub fn new(db_type: DbType) -> PeroxideDb {

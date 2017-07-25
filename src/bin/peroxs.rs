@@ -12,26 +12,54 @@ extern crate env_logger;
 
 use std::path::{Path, PathBuf};
 use std::env;
+use std::fmt;
 use std::io;
 use std::fs;
 use std::process::exit;
+use std::result;
 
 use docopt::Docopt;
 
-use peroxide_cryptsetup::model::{OpenOperation, EnrollOperation, NewDatabaseOperation, CryptOperation, PeroxideDb, DbLocation,
-                                 DbEntryType, DbType, NewContainerParameters, YubikeyEntryType};
+use peroxide_cryptsetup::model::{OpenOperation, EnrollOperation, NewDatabaseOperation, ListOperation,
+                                 CryptOperation, PeroxideDb, DbLocation, DbEntryType, DbType,
+                                 NewContainerParameters, YubikeyEntryType};
 use peroxide_cryptsetup::context::MainContext;
+
+type Result<T> = result::Result<T, CmdError>;
+
+enum CmdError {
+    DatabaseNotAvailable(io::Error),
+    UnrecognisedOperation,
+}
+
+impl fmt::Display for CmdError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &CmdError::UnrecognisedOperation => write!(fmt, "Operation was not recognised. This is probably a bug."),
+            &CmdError::DatabaseNotAvailable(ref err) => write!(fmt, "No peroxs database file '{}' found: {}", PEROXIDE_DB_NAME, err),
+        }
+    }
+}
+
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 static USAGE: &'static str = "
 Usage:
-    peroxs enroll (keyfile <keyfile> | passphrase | yubikey [hybrid] --slot=<slot>) [new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits>] <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>] 
+    peroxs enroll keyfile <keyfile> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll keyfile <keyfile> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll passphrase <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll passphrase new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll yubikey [hybrid] --slot=<slot> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll yubikey [hybrid] --slot=<slot> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
     peroxs init <db-type> [at <db>]
+    peroxs list [--all]
     peroxs open <device-or-uuid>... [--name=<name>] [at <db>]
     peroxs (--help | --version)
 
 Actions:
     enroll                                  Enroll a new or existing LUKS disk(s) with a given key type and parameters 
     init                                    Create a new database of the specified type
+    list                                    List disks that are in the database and available
     open                                    Open an existing LUKS disk(s) with parameters from the database
 
 Enrollment types:
@@ -66,6 +94,7 @@ struct Args {
     cmd_new: bool,
     cmd_open: bool,
     cmd_keyfile: bool,
+    cmd_list: bool,
     cmd_passphrase: bool,
     cmd_yubikey: bool,
     cmd_hybrid: bool,
@@ -74,7 +103,8 @@ struct Args {
     arg_db_type: Option<String>,
     arg_device_or_uuid: Option<Vec<String>>,
     arg_keyfile: Option<String>,
-    flag_version: bool, // TODO - implement!
+    flag_version: bool,
+    flag_all: bool,
     flag_help: bool,
     flag_cipher: Option<String>,
     flag_hash: Option<String>,
@@ -103,9 +133,9 @@ fn get_db_type<P: AsRef<Path>>(db_path: &P) -> io::Result<DbType> {
 }
 
 fn get_db_location(at_path: Option<PathBuf>, maybe_db_type: Option<&DbType>) -> io::Result<DbLocation> {
-    let db_path = try!(get_db_path(at_path));
-    let db_type = try!(maybe_db_type.map(|t| Ok(t.clone()))
-        .unwrap_or_else(|| get_db_type(&db_path)));
+    let db_path = get_db_path(at_path)?;
+    let db_type = maybe_db_type.map(|t| Ok(t.clone()))
+        .unwrap_or_else(|| get_db_type(&db_path))?;
     Ok(DbLocation {
         path: db_path,
         db_type: db_type,
@@ -190,7 +220,7 @@ fn _open_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<St
     })
 }
 
-fn get_operation(args: &Args) -> CryptOperation {
+fn get_operation(args: &Args) -> Result<CryptOperation> {
     let db_type = args.arg_db_type.as_ref().map(|s| match s.as_ref() {
         "operation" => DbType::Operation,
         "backup" => DbType::Backup,
@@ -198,15 +228,16 @@ fn get_operation(args: &Args) -> CryptOperation {
     });
     let db_location = get_db_location(args.arg_db.as_ref().map(PathBuf::from),
                                       db_type.as_ref())
-        .unwrap_or_else(|err| panic!("expecting db location, error: {}", err));
+        .map_err(|err| CmdError::DatabaseNotAvailable(err))?;
     let context = MainContext::new(db_location);
     let maybe_paths = args.arg_device_or_uuid.clone();
 
     match args {
-        _ if args.cmd_init => CryptOperation::NewDatabase(NewDatabaseOperation { context: context }),
-        _ if args.cmd_enroll => _enroll_operation(args, context, maybe_paths),
-        _ if args.cmd_open => _open_operation(args, context, maybe_paths),
-        _ => panic!("BUG: Unrecognised operation!"),
+        _ if args.cmd_enroll => Ok(_enroll_operation(args, context, maybe_paths)),
+        _ if args.cmd_init => Ok(CryptOperation::NewDatabase(NewDatabaseOperation { context: context })),
+        _ if args.cmd_list => Ok(CryptOperation::List(ListOperation { context: context, only_available: !args.flag_all })),
+        _ if args.cmd_open => Ok(_open_operation(args, context, maybe_paths)),
+        _ => Err(CmdError::UnrecognisedOperation)
     }
 }
 
@@ -220,9 +251,21 @@ fn run_peroxs() -> i32 {
         .and_then(|d| d.argv(env::args().into_iter()).deserialize())
         .unwrap_or_else(|e| e.exit());
 
-    if let Err(reason) = get_operation(&args).perform() {
-        println!("ERROR: {}", reason);
-        -1
+    let operation = get_operation(&args);
+
+    if args.flag_version {
+        println!("peroxs {}", VERSION);
+        0
+    } else if let Ok(op) = operation {
+        if let Err(error) = op.perform() {
+            println!("ERROR: {}", error);
+            -1
+        } else {
+            0
+        }
+    } else if let Err(cmd_error) = operation {
+        println!("{}", cmd_error);
+        -2
     } else {
         0
     }

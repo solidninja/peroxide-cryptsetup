@@ -14,6 +14,11 @@ extern crate libc;
 
 extern crate log;
 
+extern crate term;
+
+#[macro_use]
+extern crate prettytable;
+
 pub mod db;
 pub mod model;
 pub mod operation;

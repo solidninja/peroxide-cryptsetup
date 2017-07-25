@@ -29,10 +29,10 @@ impl<Context> PerformCryptOperation for OpenOperation<Context>
     where Context: context::ReaderContext + context::InputContext + context::DiskSelector + ApplyCryptDeviceOptions
 {
     fn apply(&self) -> Result<()> {
-        let db = try!(self.context.open_peroxide_db().map_err(|_| OperationError::DbOpenFailed));
+        let db = self.context.open_peroxide_db().map_err(|_| OperationError::DbOpenFailed)?;
 
         // TODO - do we need to incorporate blkid_rs::BlockDevice::read_luks_header or is device.load() enough?
-        let devices = try!(self.context.lookup_devices(&self.device_paths_or_uuids));
+        let devices = self.context.lookup_devices(&self.device_paths_or_uuids)?;
 
         let mut devices_with_entries = try!(devices.into_iter()
             .enumerate()

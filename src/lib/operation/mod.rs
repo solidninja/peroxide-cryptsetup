@@ -22,6 +22,12 @@ pub struct NewDatabaseOperation<Context: context::WriterContext> {
 }
 
 #[derive(Debug)]
+pub struct ListOperation<Context: context::ReaderContext + context::DiskSelector> {
+    pub context: Context,
+    pub only_available: bool,
+}
+
+#[derive(Debug)]
 pub struct OpenOperation<Context>
     where Context: context::ReaderContext + context::InputContext + context::DiskSelector + ApplyCryptDeviceOptions
 {
@@ -55,6 +61,7 @@ pub trait PerformCryptOperation {
 pub enum CryptOperation {
     Enroll(EnrollOperation<context::MainContext, context::MainContext>),
     NewDatabase(NewDatabaseOperation<context::MainContext>),
+    List(ListOperation<context::MainContext>),
     Open(OpenOperation<context::MainContext>),
 }
 
@@ -62,9 +69,10 @@ impl CryptOperation {
     pub fn perform(self) -> Result<()> {
         // TODO Once https://github.com/rust-lang/rfcs/issues/754 is available rewrite this
         match self {
+            CryptOperation::Enroll(enroll_op) => enroll_op.apply(),
+            CryptOperation::List(list_op) => list_op.apply(),
             CryptOperation::NewDatabase(newdb_op) => newdb_op.apply(),
             CryptOperation::Open(open_op) => open_op.apply(),
-            CryptOperation::Enroll(enroll_op) => enroll_op.apply(),
         }
     }
 }
@@ -237,6 +245,7 @@ impl<C> UserDiskLookup for C
     }
 }
 
-mod newdb;
 mod enroll;
+mod list;
+mod newdb;
 mod open;
