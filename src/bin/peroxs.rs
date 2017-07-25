@@ -22,7 +22,7 @@ use docopt::Docopt;
 
 use peroxide_cryptsetup::model::{OpenOperation, EnrollOperation, NewDatabaseOperation, ListOperation,
                                  CryptOperation, PeroxideDb, DbLocation, DbEntryType, DbType,
-                                 NewContainerParameters, YubikeyEntryType};
+                                 NewContainerParameters, YubikeyEntryType, RegisterOperation};
 use peroxide_cryptsetup::context::MainContext;
 
 type Result<T> = result::Result<T, CmdError>;
@@ -54,6 +54,8 @@ Usage:
     peroxs init <db-type> [at <db>]
     peroxs list [--all]
     peroxs open <device-or-uuid>... [--name=<name>] [at <db>]
+    peroxs register keyfile <keyfile> <device-or-uuid>...  [--name=<name>] [at <db>]
+    peroxs register passphrase <device-or-uuid>...  [--name=<name>] [at <db>]
     peroxs (--help | --version)
 
 Actions:
@@ -61,6 +63,7 @@ Actions:
     init                                    Create a new database of the specified type
     list                                    List disks that are in the database and available
     open                                    Open an existing LUKS disk(s) with parameters from the database
+    register                                Add an existing keyfile/passphrase entry in the database for a LUKS disk(s)
 
 Enrollment types:
     keyfile                                 An existing key file with randomness inside
@@ -99,6 +102,7 @@ struct Args {
     cmd_yubikey: bool,
     cmd_hybrid: bool,
     cmd_at: bool,
+    cmd_register: bool,
     arg_db: Option<String>,
     arg_db_type: Option<String>,
     arg_device_or_uuid: Option<Vec<String>>,
@@ -210,13 +214,28 @@ fn _enroll_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<
 }
 
 fn _open_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<String>>) -> CryptOperation {
-    let device_paths_or_uuids = maybe_paths.unwrap_or_else(|| panic!("expecting device paths or uuids"));
+    let device_paths_or_uuids = maybe_paths.expect("expecting device paths or uuids");
     let name = args.flag_name.clone();
 
     CryptOperation::Open(OpenOperation {
         context: context,
         device_paths_or_uuids: device_paths_or_uuids,
         name: name,
+    })
+}
+
+fn _register_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<String>>) -> CryptOperation {
+    let device_paths_or_uuids = maybe_paths.expect("expecting device paths or uuids");
+    let name = args.flag_name.clone();
+    let maybe_keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
+    let entry_type = get_entry_type(&args);
+
+    CryptOperation::Register(RegisterOperation {
+        context: context,
+        device_paths_or_uuids: device_paths_or_uuids,
+        name: name,
+        keyfile: maybe_keyfile,
+        entry_type: entry_type,
     })
 }
 
@@ -237,6 +256,7 @@ fn get_operation(args: &Args) -> Result<CryptOperation> {
         _ if args.cmd_init => Ok(CryptOperation::NewDatabase(NewDatabaseOperation { context: context })),
         _ if args.cmd_list => Ok(CryptOperation::List(ListOperation { context: context, only_available: !args.flag_all })),
         _ if args.cmd_open => Ok(_open_operation(args, context, maybe_paths)),
+        _ if args.cmd_register => Ok(_register_operation(args, context, maybe_paths)),
         _ => Err(CmdError::UnrecognisedOperation)
     }
 }

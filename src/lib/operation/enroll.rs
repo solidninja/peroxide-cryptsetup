@@ -13,9 +13,9 @@ impl<Context, BackupContext> PerformCryptOperation for EnrollOperation<Context, 
           BackupContext: ReaderContext + InputContext
 {
     fn apply(&self) -> Result<()> {
-        try!(self.validate_entry_constraints());
-        let mut devices = try!(self.context.lookup_devices(&self.device_paths_or_uuids));
-        try!(self.create_new_containers(&mut devices));
+        self.validate_entry_constraints()?;
+        let mut devices = self.context.lookup_devices(&self.device_paths_or_uuids)?;
+        self.create_new_containers(&mut devices)?;
         let devices_with_entries = devices.into_iter()
             .map(|device| {
                 let entry = self.get_preexisting_entry(&device);
@@ -34,14 +34,14 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
     fn validate_entry_constraints(&self) -> Result<()> {
         let db_loc = self.context.db_location();
 
-        try!(match self.entry_type {
+        match self.entry_type {
             DbEntryType::Keyfile if self.device_paths_or_uuids.len() > 1 => {
                 Err(OperationError::ValidationFailed("Multiple devices should not have the same key file".to_string()))
             }
             _ => Ok(()),
-        });
+        }?;
 
-        try!(match self.entry_type {
+        match self.entry_type {
             DbEntryType::Keyfile => {
                 let keyfile = self.keyfile.as_ref().unwrap();
                 db_loc.relative_path(keyfile)
@@ -52,7 +52,7 @@ impl<Context, BackupContext> EnrollOperation<Context, BackupContext>
                     .map(|_| ())
             }
             _ => Ok(()),
-        });
+        }?;
 
         Ok(())
     }

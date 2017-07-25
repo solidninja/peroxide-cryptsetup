@@ -10,3 +10,5 @@ extern crate blkid_rs;
 extern crate log;
 
 pub mod device;
+
+pub use blkid_rs::{BlockDevice, LuksHeader};

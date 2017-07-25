@@ -1,5 +1,6 @@
 use std::io;
 use std::fmt;
+use std::fs;
 use std::path::{PathBuf, Path};
 use std::result;
 use std::convert;
@@ -10,6 +11,7 @@ use std::collections::HashMap;
 use errno::Errno;
 use uuid;
 use cryptsetup_rs::device::CryptDevice;
+use cryptsetup_rs::{BlockDevice, LuksHeader};
 
 use context;
 use model::{DbEntryType, VolumeId, YubikeySlot, YubikeyEntryType};
@@ -33,6 +35,16 @@ pub struct OpenOperation<Context>
 {
     pub context: Context,
     pub device_paths_or_uuids: Vec<String>,
+    pub name: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct RegisterOperation<Context>
+    where Context: context::WriterContext + context::DiskSelector + ApplyCryptDeviceOptions {
+    pub context: Context,
+    pub entry_type: DbEntryType,
+    pub device_paths_or_uuids: Vec<String>,
+    pub keyfile: Option<PathBuf>,
     pub name: Option<String>,
 }
 
@@ -63,6 +75,7 @@ pub enum CryptOperation {
     NewDatabase(NewDatabaseOperation<context::MainContext>),
     List(ListOperation<context::MainContext>),
     Open(OpenOperation<context::MainContext>),
+    Register(RegisterOperation<context::MainContext>),
 }
 
 impl CryptOperation {
@@ -73,6 +86,7 @@ impl CryptOperation {
             CryptOperation::List(list_op) => list_op.apply(),
             CryptOperation::NewDatabase(newdb_op) => newdb_op.apply(),
             CryptOperation::Open(open_op) => open_op.apply(),
+            CryptOperation::Register(register_op) => register_op.apply(),
         }
     }
 }
@@ -97,6 +111,7 @@ pub enum OperationError {
     BugExplanation(String),
     FeatureNotAvailable,
     UnknownCryptoError,
+    InvalidUuid(String),
 }
 
 impl fmt::Display for OperationError {
@@ -124,6 +139,7 @@ impl fmt::Display for OperationError {
             &OperationError::BugExplanation(ref expl) => write!(fmt, "BUG: {}", expl),
             &OperationError::FeatureNotAvailable => write!(fmt, "This feature is not available"),
             &OperationError::UnknownCryptoError => write!(fmt, "Unknown crypto operation error occurred"),
+            &OperationError::InvalidUuid(ref expl) => write!(fmt, "{}", expl),
         }
     }
 }
@@ -182,6 +198,7 @@ impl FromStr for PathOrUuid {
 trait UserDiskLookup {
     fn resolve_paths_or_uuids<'a>(&self, paths_or_uuids: &'a [String]) -> HashMap<&'a String, context::Result<PathBuf>>;
     fn lookup_devices<'a>(&self, paths_or_uuids: &'a [String]) -> Result<Vec<CryptDevice>>;
+    fn uuid_of_path<P>(&self, path: &P) -> Result<uuid::Uuid> where P: AsRef<Path>;
 }
 
 trait PasswordPromptString {
@@ -243,9 +260,15 @@ impl<C> UserDiskLookup for C
             })
             .collect()
     }
+    fn uuid_of_path<P>(&self, path: &P) -> Result<uuid::Uuid> where P: AsRef<Path> {
+        let f = fs::File::open(path).map_err(|e| context::Error::DiskIoError { path: Some(path.as_ref().to_owned()), cause: e })?;
+        let header = BlockDevice::read_luks_header(f).map_err(|e| OperationError::InvalidUuid(format!("Unable to read LUKS header from {}: {:?}", path.as_ref().to_string_lossy(), e)))?;
+        header.uuid().map_err(|e| OperationError::InvalidUuid(format!("Unable to parse UUID from LUKS header of {}: {:?}", path.as_ref().to_string_lossy(), e)))
+    }
 }
 
 mod enroll;
 mod list;
 mod newdb;
 mod open;
+mod register;

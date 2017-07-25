@@ -1,5 +1,6 @@
 pub use db::{PeroxideDb, DbType, DbEntryType, DbEntry, VolumeId, VolumeUuid, YubikeySlot, YubikeyEntryType};
-pub use operation::{NewContainerParameters, CryptOperation, OpenOperation, NewDatabaseOperation, EnrollOperation, ListOperation, OperationError};
+pub use operation::{NewContainerParameters, CryptOperation, OpenOperation, NewDatabaseOperation, EnrollOperation,
+                    ListOperation, RegisterOperation, OperationError};
 
 use std::path::PathBuf;
 
