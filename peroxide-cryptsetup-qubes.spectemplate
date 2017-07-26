@@ -1,0 +1,30 @@
+Name:           peroxide-cryptsetup-qubes
+Version:        0.1.1
+Release:        @ITERATION@%{?dist}
+Summary:        cli utility for managing cryptsetup disks on Linux
+
+Group:          Applications/System
+License:        GPLv3
+URL:            https://github.com/solidninja/peroxide-cryptsetup
+
+BuildRequires:  cryptsetup-devel
+BuildRequires:  libsodium-devel
+BuildRequires:  ykpers-devel
+
+%description
+FIXME
+
+%prep
+cp -pr %{_sourcedir}/. ./
+%setup -T -D -n .
+
+%build
+/root/.cargo/bin/cargo build --release --verbose
+
+%install
+rm -rf %{buildroot}
+/root/.cargo/bin/cargo install --path . --root %{buildroot}/usr
+rm %{buildroot}/usr/.crates.toml || true
+
+%files
+%{_bindir}/peroxs
