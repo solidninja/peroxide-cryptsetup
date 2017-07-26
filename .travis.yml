@@ -16,8 +16,7 @@ install:
   - sudo apt-get install libsodium-dev -y
 script:
   - cargo build --verbose
-  - /bin/sh -c 'echo $PATH; env | sort;'
-  - sudo -E cargo test --verbose
+  - sudo /bin/sh -c "PATH=/home/travis/.cargo/bin:$PATH LD_LIBRARY_PATH=/home/travis/.cargo/lib cargo test --verbose"
 addons:
   apt:
     packages:
