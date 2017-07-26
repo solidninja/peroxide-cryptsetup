@@ -16,6 +16,7 @@ install:
   - sudo apt-get install libsodium-dev -y
 script:
   - cargo build --verbose
+  - /bin/sh -c 'echo $PATH; env | sort;'
   - sudo -E cargo test --verbose
 addons:
   apt:
