@@ -136,10 +136,11 @@ ITERATION=0 docker-rpm-builder dir --verbose qubes-rust-fc23:latest . /tmp/rpms
 For building the dracut module:
 
 ```bash
+# dnf install btrfs-progs kernel peroxide-cryptsetup-qubes
+
+# e.g. version 4.8.13-100.fc23.x86_64
 dracut -a peroxs --force --kver 4.8.13-100.fc23.x86_64
-
-qemu-system-x86_64 -enable-kvm -nographic -kernel /tmp/vmlinuz-4.8.13-100.fc23.x86_64 -append "rd.peroxs.uuid=78b69567-d31e-4438-99c9-67764776f03d console=ttyS0 root=/dev/root rd.debug" -initrd /tmp/initramfs-4.8.13-100.fc23.x86_64.img -drive file=disk,driver=raw | tee /tmp/log-2
-
+qemu-system-x86_64 -enable-kvm -nographic -kernel /tmp/vmlinuz-4.8.13-100.fc23.x86_64 -append "rd.peroxs.uuid=78b69567-d31e-4438-99c9-67764776f03d console=ttyS0 root=/dev/root rd.debug" -initrd /tmp/initramfs-4.8.13-100.fc23.x86_64.img -drive file=disk,driver=raw
 ```
 
 
