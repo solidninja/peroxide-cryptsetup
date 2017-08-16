@@ -79,7 +79,7 @@ Arguments:
 
 Options:
     --help                                  Show this message
-    --version                               Show the version of peroxs and libraries.
+    --version                               Show the version of peroxs
 
     --backup-db <backup-db>                 The path to the backup database to use (if any)
     -c <cipher>, --cipher <cipher>          Cipher to use for new LUKS container
