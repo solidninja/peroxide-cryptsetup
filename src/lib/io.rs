@@ -101,8 +101,9 @@ impl Disks {
     pub fn disk_uuid_path(uuid: &uuid::Uuid) -> io::Result<PathBuf> {
         let path = Path::new(DISK_BY_UUID).join(uuid.hyphenated().to_string());
 
-        fs::metadata(&path).and_then(|meta| {
-            if meta.is_file() {
+        fs::symlink_metadata(&path).and_then(|meta| {
+            let ft = meta.file_type();
+            if ft.is_file() || ft.is_symlink() {
                 Ok(path)
             } else {
                 Err(io::Error::new(io::ErrorKind::NotFound,
