@@ -12,3 +12,13 @@ target/
 *.rs.bk
 
 core
+
+# Locally built rpm files
+rpms/
+
+# IntelliJ
+*.iml
+.idea/
+
+# testing db
+peroxs-db.json

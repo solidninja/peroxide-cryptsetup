@@ -21,12 +21,14 @@ Documentation is currently a bit light, but this will get you started:
 
 * `cargo install peroxide-cryptsetup`
 
-Alternatively, pull this repository and build from source:
+Alternatively, clone this repository and build from source:
 
  * `cargo build`
  * now `target/debug/peroxs` will be simply referred to as `peroxs`
 
-### Create a `peroxs-db.json` and enroll a keyfile
+### Enrolling your first disk
+
+Enrollment is the term used throughout for adding a new keyslot to either an existing or new LUKS disk. 
 
 Pick a block device (disk). We will use `/dev/your-disk` as an example.
 
@@ -46,21 +48,39 @@ For more information on the values of `--cipher`, `--hash` and `--key-bits` see 
  * `cd /location/of/peroxs/db`
  * `peroxs open /dev/your-disk` (alternative, can use uuid of disk)
 
+### Register an existing keyfile or passphrase for a disk
+
+* `peroxs register keyfile secret.key /dev/your-disk --name=awesome`
+
+### List disks in the database and their status
+
+* `peroxs list --all`
+
 ### Full usage
 
 _verbatim from [peroxs.rs](src/bin/peroxs.rs)_
 
 ```
 Usage:
-    peroxs enroll (keyfile <keyfile> | passphrase | yubikey [hybrid] --slot=<slot>) [new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits>] <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>] 
+    peroxs enroll keyfile <keyfile> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll keyfile <keyfile> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll passphrase <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll passphrase new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll yubikey [hybrid] --slot=<slot> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll yubikey [hybrid] --slot=<slot> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
     peroxs init <db-type> [at <db>]
+    peroxs list [--all]
     peroxs open <device-or-uuid>... [--name=<name>] [at <db>]
+    peroxs register keyfile <keyfile> <device-or-uuid>...  [--name=<name>] [at <db>]
+    peroxs register passphrase <device-or-uuid>...  [--name=<name>] [at <db>]
     peroxs (--help | --version)
 
 Actions:
     enroll                                  Enroll a new or existing LUKS disk(s) with a given key type and parameters 
     init                                    Create a new database of the specified type
+    list                                    List disks that are in the database and available
     open                                    Open an existing LUKS disk(s) with parameters from the database
+    register                                Add an existing keyfile/passphrase entry in the database for a LUKS disk(s)
 
 Enrollment types:
     keyfile                                 An existing key file with randomness inside
@@ -76,7 +96,7 @@ Arguments:
 
 Options:
     --help                                  Show this message
-    --version                               Show the version of peroxs and libraries.
+    --version                               Show the version of peroxs
 
     --backup-db <backup-db>                 The path to the backup database to use (if any)
     -c <cipher>, --cipher <cipher>          Cipher to use for new LUKS container
@@ -95,9 +115,11 @@ There's no official roadmap, but have a look in [TASKS.todo](TASKS.todo) for a l
 
 You will require the following packages installed:
 
+* `libcryptsetup-devel`
 * `libsodium-devel`
 * `ykpers-devel`
-FIXME
+
+(Your distribution's package names may vary)
 
 ## Contributing
 
