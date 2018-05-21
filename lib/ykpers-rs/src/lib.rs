@@ -120,6 +120,7 @@ pub trait Yubikey {
 
     fn new() -> Result<Self> where Self: Sized;
     fn get_status(&self) -> Result<Self::Status> where Self::Status: YubikeyStatus;
+    fn get_serial(&self) -> Result<u32> where Self::Status: YubikeyStatus;
 }
 
 impl Yubikey for YubikeyDevice {
@@ -133,6 +134,13 @@ impl Yubikey for YubikeyDevice {
         NullPtr::wrap_err(unsafe { ffi::ykds_alloc() })
             .and_then(|status| Error::from_zero_err(unsafe { ffi::yk_get_status(self.key, status) }).map(|_| status))
             .map(|status| YubikeyDeviceStatus { status: status })
+    }
+    fn get_serial(&self) -> Result<u32> {
+        let mut serial = 0;
+        Error::from_zero_err(unsafe {
+            ffi::yk_get_serial(self.key, 1, 0, &mut serial)
+        })?;
+        Ok(serial)
     }
 }
 
