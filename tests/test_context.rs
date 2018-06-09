@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use peroxide_cryptsetup::model::DbType;
 use peroxide_cryptsetup::context::KeyfileInput;
+use peroxide_cryptsetup::model::DbType;
 
 use support::*;
 
@@ -11,7 +11,9 @@ fn test_read_relative_keyfile_in_temp_subdir() {
 
     let temp_context = TemporaryDirContext::new(DbType::Backup);
     let expected_content = [0xC, 0x0, 0xF, 0xF, 0xE, 0xE];
-    let keyfile_temp_file = temp_context.write_keyfile(Some(Path::new("test_subdir")), &expected_content).unwrap();
+    let keyfile_temp_file = temp_context
+        .write_keyfile(Some(Path::new("test_subdir")), &expected_content)
+        .unwrap();
     let keyfile_path = keyfile_temp_file.relative_to(&temp_context);
 
     let key_contents = temp_context.read_keyfile(&keyfile_path).unwrap();

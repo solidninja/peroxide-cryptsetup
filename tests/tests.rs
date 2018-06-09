@@ -2,10 +2,10 @@ extern crate cryptsetup_rs;
 extern crate peroxide_cryptsetup;
 
 extern crate env_logger;
+extern crate log;
 extern crate tempdir;
 extern crate tempfile;
 extern crate uuid;
-extern crate log;
 
 #[macro_use]
 extern crate expectest;

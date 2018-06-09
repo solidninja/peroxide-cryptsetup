@@ -1,7 +1,7 @@
-use operation::{PerformCryptOperation, NewDatabaseOperation, Result, OperationError};
-use model::PeroxideDb;
 use context;
 use io::FileExtensions;
+use model::PeroxideDb;
+use operation::{NewDatabaseOperation, OperationError, PerformCryptOperation, Result};
 
 impl<Context: context::WriterContext> PerformCryptOperation for NewDatabaseOperation<Context> {
     fn apply(&self) -> Result<()> {
@@ -10,7 +10,9 @@ impl<Context: context::WriterContext> PerformCryptOperation for NewDatabaseOpera
             try!(self.context.save_peroxide_db(&the_db));
             Ok(())
         } else {
-            Err(OperationError::ValidationFailed("File already exists at this location".to_string()))
+            Err(OperationError::ValidationFailed(
+                "File already exists at this location".to_string(),
+            ))
         }
     }
 }

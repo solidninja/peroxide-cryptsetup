@@ -1,57 +1,66 @@
 [package]
-name = "peroxide-cryptsetup"
-version = "0.1.1"
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
-license = "GPL-3.0"
 description = "Command-line utility for managing LUKS encrypted volumes using 2FA methods (for example Yubikeys)"
-repository = "https://github.com/solidninja/peroxide-cryptsetup"
 homepage = "https://github.com/solidninja/peroxide-cryptsetup"
-readme = "README.md"
 keywords = ["cli", "cryptsetup", "luks"]
+license = "GPL-3.0"
+name = "peroxide-cryptsetup"
+readme = "README.md"
+repository = "https://github.com/solidninja/peroxide-cryptsetup"
+version = "0.2.0"
+
+[[bin]]
+doc = false
+name = "peroxs"
+test = false
+
+[[test]]
+name = "tests"
+
+[dependencies]
+docopt = "1.0.0"
+env_logger = "0.5.10"
+errno = "0.2.3"
+libc = "0.2.42"
+log = "0.4.2"
+prettytable-rs = "0.7.0"
+serde = "1.0.66"
+serde_derive = "1.0.66"
+serde_json = "1.0.20"
+term = "0.5.1"
+termios = "0.3.0"
+
+[dependencies.cryptsetup-rs]
+path = "../cryptsetup-rs"
+version = "0.2"
+
+[dependencies.sodiumoxide]
+optional = true
+version = "0.1.0"
+
+[dependencies.uuid]
+features = ["serde", "v4"]
+version = "0.6.5"
+
+[dependencies.ykpers-rs]
+optional = true
+path = "lib/ykpers-rs"
+version = "0.1.0"
+
+[dev-dependencies]
+env_logger = "0.5.10"
+expectest = "0.10.0"
+tempdir = "0.3.7"
+tempfile = "3.0.2"
 
 [features]
 default = ["yubikey", "yubikey_hybrid"]
 yubikey = ["ykpers-rs"]
 yubikey_hybrid = ["yubikey", "sodiumoxide"]
 
-[dependencies]
-docopt = "0.8"
-serde = "1.0"
-serde_derive = "1.0"
-serde_json = "1.0"
-uuid = { version = "0.6", features = ["serde", "v4"] }
-errno = "0.2"
-sodiumoxide = { version = "0.1", optional = true }
-
-log = "0.3"
-env_logger = "0.4"
-termios = "0.2"
-libc = "0.2"
-
-prettytable-rs = "^0.6"
-term = "0.4"
-
-cryptsetup-rs = { version = "0.2", path = "../cryptsetup-rs" }
-ykpers-rs = { version = "0.1.0", path = "lib/ykpers-rs", optional = true }
-
-[dev-dependencies]
-tempfile = "2"
-tempdir = "0.3"
-env_logger = "0.4"
-expectest = "0.6"
-
 [lib]
 name = "peroxide_cryptsetup"
 path = "src/lib/lib.rs"
-
-[[bin]]
-name = "peroxs"
-test = false
-doc = false
-
-[[test]]
-name = "tests"
-
 [profile.dev]
 codegen-units = 4
 

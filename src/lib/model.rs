@@ -1,9 +1,10 @@
-pub use db::{PeroxideDb, DbType, DbEntryType, DbEntry, VolumeId, VolumeUuid, YubikeySlot, YubikeyEntryType};
-pub use operation::{NewContainerParameters, CryptOperation, OpenOperation, NewDatabaseOperation, EnrollOperation,
-                    ListOperation, RegisterOperation, OperationError};
+pub use db::{DbEntry, DbEntryType, DbType, PeroxideDb, VolumeId, VolumeUuid, YubikeyEntryType, YubikeySlot};
+pub use operation::{
+    CryptOperation, EnrollOperation, ListOperation, NewContainerParameters, NewDatabaseOperation, OpenOperation,
+    OperationError, RegisterOperation,
+};
 
 use std::path::PathBuf;
-
 
 #[derive(Debug, Clone)]
 pub struct DbLocation {

@@ -21,8 +21,8 @@ use docopt::Docopt;
 
 use peroxide_cryptsetup::context::MainContext;
 use peroxide_cryptsetup::model::{
-    CryptOperation, DbEntryType, DbLocation, DbType, EnrollOperation, ListOperation, NewContainerParameters, NewDatabaseOperation,
-    OpenOperation, PeroxideDb, RegisterOperation, YubikeyEntryType,
+    CryptOperation, DbEntryType, DbLocation, DbType, EnrollOperation, ListOperation, NewContainerParameters,
+    NewDatabaseOperation, OpenOperation, PeroxideDb, RegisterOperation, YubikeyEntryType,
 };
 
 type Result<T> = result::Result<T, CmdError>;
@@ -36,7 +36,9 @@ impl fmt::Display for CmdError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &CmdError::UnrecognisedOperation => write!(fmt, "Operation was not recognised. This is probably a bug."),
-            &CmdError::DatabaseNotAvailable(ref err) => write!(fmt, "No peroxs database file '{}' found: {}", PEROXIDE_DB_NAME, err),
+            &CmdError::DatabaseNotAvailable(ref err) => {
+                write!(fmt, "No peroxs database file '{}' found: {}", PEROXIDE_DB_NAME, err)
+            }
         }
     }
 }
@@ -130,12 +132,16 @@ fn get_db_path(arg_db: Option<PathBuf>) -> io::Result<PathBuf> {
 }
 
 fn get_db_type<P: AsRef<Path>>(db_path: &P) -> io::Result<DbType> {
-    fs::File::open(db_path).and_then(PeroxideDb::from).map(|db| db.db_type.clone())
+    fs::File::open(db_path)
+        .and_then(PeroxideDb::from)
+        .map(|db| db.db_type.clone())
 }
 
 fn get_db_location(at_path: Option<PathBuf>, maybe_db_type: Option<&DbType>) -> io::Result<DbLocation> {
     let db_path = get_db_path(at_path)?;
-    let db_type = maybe_db_type.map(|t| Ok(t.clone())).unwrap_or_else(|| get_db_type(&db_path))?;
+    let db_type = maybe_db_type
+        .map(|t| Ok(t.clone()))
+        .unwrap_or_else(|| get_db_type(&db_path))?;
     Ok(DbLocation {
         path: db_path,
         db_type: db_type,
@@ -151,7 +157,9 @@ fn get_new_container_parameters(args: &Args) -> Option<NewContainerParameters> {
         let cipher = args.flag_cipher
             .as_ref()
             .map_or_else(|| panic!("Must supply a cipher string"), |s| s.clone());
-        let hash = args.flag_hash.as_ref().map_or_else(|| panic!("Must supply a hash"), |s| s.clone());
+        let hash = args.flag_hash
+            .as_ref()
+            .map_or_else(|| panic!("Must supply a hash"), |s| s.clone());
         let key_bits = args.flag_key_bits.unwrap_or_else(|| panic!("Must supply key bits"));
         Some(NewContainerParameters {
             cipher: cipher,
@@ -189,9 +197,11 @@ fn get_entry_type(args: &Args) -> DbEntryType {
 }
 
 fn _enroll_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<String>>) -> CryptOperation {
-    let backup_db_context = get_backup_db_location(args.flag_backup_db.as_ref().map(PathBuf::from)).map(MainContext::new);
+    let backup_db_context =
+        get_backup_db_location(args.flag_backup_db.as_ref().map(PathBuf::from)).map(MainContext::new);
     let new_container = get_new_container_parameters(args);
-    let iteration_ms = args.flag_iteration_ms.unwrap_or_else(|| panic!("expecting iteration ms"));
+    let iteration_ms = args.flag_iteration_ms
+        .unwrap_or_else(|| panic!("expecting iteration ms"));
     let device_paths_or_uuids = maybe_paths.unwrap_or_else(|| panic!("expecting device paths or uuids"));
     let entry_type = get_entry_type(&args);
     let name = args.flag_name.clone();
@@ -243,8 +253,8 @@ fn get_operation(args: &Args) -> Result<CryptOperation> {
         "backup" => DbType::Backup,
         _ => panic!("Unknown db_type!"),
     });
-    let db_location =
-        get_db_location(args.arg_db.as_ref().map(PathBuf::from), db_type.as_ref()).map_err(|err| CmdError::DatabaseNotAvailable(err))?;
+    let db_location = get_db_location(args.arg_db.as_ref().map(PathBuf::from), db_type.as_ref())
+        .map_err(|err| CmdError::DatabaseNotAvailable(err))?;
     let context = MainContext::new(db_location);
     let maybe_paths = args.arg_device_or_uuid.clone();
 
@@ -262,7 +272,7 @@ fn get_operation(args: &Args) -> Result<CryptOperation> {
 }
 
 fn run_peroxs() -> i32 {
-    env_logger::init().unwrap();
+    env_logger::init();
     // this enables verbose logging in the cryptsetup lib
     // TODO: remove this or move to feature flag
     MainContext::trace_on();

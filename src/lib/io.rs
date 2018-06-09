@@ -1,7 +1,7 @@
+use std::fs;
 use std::io;
 use std::io::{Error, ErrorKind, Read};
 use std::path::{Path, PathBuf};
-use std::fs;
 
 use model::DbLocation;
 use uuid;
@@ -91,8 +91,9 @@ impl Disks {
             entries
                 .filter(Disks::has_full_uuid)
                 .map(|entry| {
-                    entry.map(|e| e.path())
-                        .and_then(|p| Disks::parse_uuid_from(&p).ok_or(Error::new(ErrorKind::Other, "Uuid parsing failed")))
+                    entry.map(|e| e.path()).and_then(|p| {
+                        Disks::parse_uuid_from(&p).ok_or(Error::new(ErrorKind::Other, "Uuid parsing failed"))
+                    })
                 })
                 .collect()
         })
@@ -106,34 +107,36 @@ impl Disks {
             if ft.is_file() || ft.is_symlink() {
                 Ok(path)
             } else {
-                Err(io::Error::new(io::ErrorKind::NotFound,
-                                   format!("Disk path {} is not a file", path.display())))
+                Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("Disk path {} is not a file", path.display()),
+                ))
             }
         })
     }
 
     pub fn is_device_mapped(name: &str) -> bool {
         let path = Path::new(DEV_MAPPER).join(name);
-        fs::metadata(&path)
-            .map(|meta| !meta.is_dir())
-            .unwrap_or(false)
+        fs::metadata(&path).map(|meta| !meta.is_dir()).unwrap_or(false)
     }
 
     // FAT32/NTFS disks do not have a UUID of the proper length - exclude them as they cannot be
     // LUKS disks
     fn has_full_uuid(e: &io::Result<fs::DirEntry>) -> bool {
-        e.as_ref().map(|entry| entry.path().file_name().unwrap().len() == UUID_LENGTH).unwrap_or(false)
+        e.as_ref()
+            .map(|entry| entry.path().file_name().unwrap().len() == UUID_LENGTH)
+            .unwrap_or(false)
     }
 }
 
 mod unsafe_passphrase {
+    use std::fs;
     use std::io;
     use std::io::{Read, Write};
-    use std::time::Duration;
-    use std::os::unix::io::{AsRawFd, RawFd};
     use std::mem;
+    use std::os::unix::io::{AsRawFd, RawFd};
     use std::ptr;
-    use std::fs;
+    use std::time::Duration;
 
     use libc;
 
@@ -151,16 +154,24 @@ mod unsafe_passphrase {
             let mut buf = [0u8; MAX_PASSPHRASE_LENGTH];
             let len = try!(reader.read(&mut buf));
             if len == 0 {
-                Err(io::Error::new(io::ErrorKind::Other,
-                                   "Unexpected EOF while reading".to_string()))
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Unexpected EOF while reading".to_string(),
+                ))
             } else {
-                let key_wrapper = KeyWrapper { data: buf[..len - 1].to_vec() };
+                let key_wrapper = KeyWrapper {
+                    data: buf[..len - 1].to_vec(),
+                };
                 // TODO - erase the contents of buf
                 Ok(key_wrapper)
             }
         }
 
-        fn read_passphrase_timeout<R: Read>(reader: &mut R, read_fd: RawFd, maybe_timeout: Option<&Duration>) -> io::Result<KeyWrapper> {
+        fn read_passphrase_timeout<R: Read>(
+            reader: &mut R,
+            read_fd: RawFd,
+            maybe_timeout: Option<&Duration>,
+        ) -> io::Result<KeyWrapper> {
             if let Some(timeout) = maybe_timeout {
                 // FIXME - better way to do this, surely.
                 unsafe {
@@ -173,15 +184,20 @@ mod unsafe_passphrase {
                         tv_sec: timeout.as_secs() as libc::time_t,
                         tv_usec: timeout.subsec_nanos() as libc::suseconds_t,
                     };
-                    let key = if libc::select(read_fd + 1,
-                                              fd_set,
-                                              ptr::null_mut(),
-                                              ptr::null_mut(),
-                                              &mut timeval as *mut libc::timeval) > 0 {
+                    let key = if libc::select(
+                        read_fd + 1,
+                        fd_set,
+                        ptr::null_mut(),
+                        ptr::null_mut(),
+                        &mut timeval as *mut libc::timeval,
+                    ) > 0
+                    {
                         TerminalPrompt::read_passphrase(reader)
                     } else {
-                        Err(io::Error::new(io::ErrorKind::TimedOut,
-                                           "Timed out while reading".to_string()))
+                        Err(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "Timed out while reading".to_string(),
+                        ))
                     };
 
                     assert!(!fd_set.is_null());
@@ -230,7 +246,6 @@ pub mod yubikey {
         KeyWrapper { data: key.to_vec() }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

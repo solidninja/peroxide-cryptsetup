@@ -1,21 +1,27 @@
+use std::fs;
 use std::io;
 use std::io::{Seek, Write};
-use std::fs;
 use std::path::{Path, PathBuf};
 
-use env_logger;
-use tempfile::NamedTempFile;
 use tempdir::TempDir;
+use tempfile::NamedTempFile;
 use uuid;
 
 use cryptsetup_rs;
 use peroxide_cryptsetup::context;
-use peroxide_cryptsetup::context::{MainContext, HasDbLocation, PeroxideDbReader, PeroxideDbWriter, KeyfileInput, ReaderContext,
-                                   WriterContext, InputContext, PasswordInput, DiskSelector, KeyWrapper};
+use peroxide_cryptsetup::context::{
+    DiskSelector, HasDbLocation, InputContext, KeyWrapper, KeyfileInput, MainContext, PasswordInput, PeroxideDbReader,
+    PeroxideDbWriter, ReaderContext, WriterContext,
+};
 use peroxide_cryptsetup::model::{DbLocation, DbType, PeroxideDb};
 
+#[cfg(not(feature = "yubikey"))]
+use peroxide_cryptsetup::context::YubikeyInput;
+
+#[cfg(not(feature = "yubikey"))]
+use peroxide_cryptsetup::model::{YubikeyEntryType, YubikeySlot};
+
 pub fn setup() {
-    env_logger::init().unwrap_or(());
     cryptsetup_rs::enable_debug(true);
 }
 
@@ -32,31 +38,33 @@ impl TemporaryDirContext {
         let temp_dir = TempDir::new("db_test").unwrap();
         let db_location = DbLocation {
             path: temp_dir.path().join("temp.db"),
-            db_type: db_type,
+            db_type,
         };
         let main_context = MainContext::new(db_location);
         main_context.save_peroxide_db(&db).unwrap();
         TemporaryDirContext {
-            main_context: main_context,
-            temp_dir: temp_dir,
-            db: db,
+            main_context,
+            temp_dir,
+            db,
         }
     }
 
     pub fn new_device_file(&self) -> io::Result<NamedTempFile> {
-        let temp_file = try!(NamedTempFile::new_in(self.temp_dir.path()));
-        try!(temp_file.set_len(150000000)); // 15 mb
+        let temp_file = NamedTempFile::new_in(self.temp_dir.path())?;
+        temp_file.as_file().set_len(150000000)?; // 15 mb
         Ok(temp_file)
     }
 
     pub fn write_keyfile(&self, maybe_subdir: Option<&Path>, contents: &[u8]) -> io::Result<NamedTempFile> {
-        let in_path = maybe_subdir.map_or_else(|| self.temp_dir.path().to_path_buf(),
-                                               |subdir| self.temp_dir.path().join(subdir));
-        try!(fs::create_dir_all(&in_path));
+        let in_path = maybe_subdir.map_or_else(
+            || self.temp_dir.path().to_path_buf(),
+            |subdir| self.temp_dir.path().join(subdir),
+        );
+        fs::create_dir_all(&in_path)?;
         NamedTempFile::new_in(in_path).and_then(|mut temp_file| {
-            try!(temp_file.seek(io::SeekFrom::Start(0)));
-            try!(temp_file.write_all(contents));
-            try!(temp_file.seek(io::SeekFrom::Start(0)));
+            temp_file.seek(io::SeekFrom::Start(0))?;
+            temp_file.write_all(contents)?;
+            temp_file.seek(io::SeekFrom::Start(0))?;
             Ok(temp_file)
         })
     }
@@ -96,12 +104,13 @@ impl PasswordInput for TemporaryDirContext {
 #[cfg(not(feature = "yubikey"))]
 impl YubikeyInput for TemporaryDirContext {
     #[allow(unused)]
-    fn read_yubikey(&self,
-                    name: Option<&str>,
-                    uuid: &uuid::Uuid,
-                    slot: YubikeySlot,
-                    entry_type: YubikeyEntryType)
-                    -> context::Result<KeyWrapper> {
+    fn read_yubikey(
+        &self,
+        name: Option<&str>,
+        uuid: &uuid::Uuid,
+        slot: YubikeySlot,
+        entry_type: YubikeyEntryType,
+    ) -> context::Result<KeyWrapper> {
         unimplemented!()
     }
 }

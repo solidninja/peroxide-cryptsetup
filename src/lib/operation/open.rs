@@ -1,15 +1,14 @@
 use std::path::PathBuf;
 
 use cryptsetup_rs;
-use cryptsetup_rs::{Luks1CryptDevice, Keyslot};
+use cryptsetup_rs::{Keyslot, Luks1CryptDevice};
 
 use uuid::Uuid;
 
 use context;
 use io::Disks;
 use model::{DbEntry, PeroxideDb, VolumeId};
-use operation::{PerformCryptOperation, OpenOperation, OperationError, UserDiskLookup, Result, LuksDevice};
-
+use operation::{LuksDevice, OpenOperation, OperationError, PerformCryptOperation, Result, UserDiskLookup};
 
 struct NamingContext {
     device_index: usize,
@@ -18,7 +17,8 @@ struct NamingContext {
 
 impl NamingContext {
     fn device_name(&self, given_name: Option<&String>, volume_id: &VolumeId) -> String {
-        given_name.or(volume_id.name.as_ref())
+        given_name
+            .or(volume_id.name.as_ref())
             .map(|name| {
                 if !self.is_single_device {
                     format!("{}_{}", name, self.device_index)
@@ -31,14 +31,18 @@ impl NamingContext {
 }
 
 impl<Context> PerformCryptOperation for OpenOperation<Context>
-    where Context: context::ReaderContext + context::InputContext
+where
+    Context: context::ReaderContext + context::InputContext,
 {
     fn apply(&self) -> Result<()> {
-        let db = self.context.open_peroxide_db().map_err(|_| OperationError::DbOpenFailed)?;
+        let db = self.context
+            .open_peroxide_db()
+            .map_err(|_| OperationError::DbOpenFailed)?;
         let _db = &db; // NLL is dead, long live NLL ¯＼(º_o)/¯
         let device_paths = self.lookup_device_paths()?;
 
-        let devices_with_entries = device_paths.into_iter()
+        let devices_with_entries = device_paths
+            .into_iter()
             .enumerate()
             .map(|(idx, path)| {
                 let device = cryptsetup_rs::open(&path)
@@ -58,25 +62,24 @@ impl<Context> PerformCryptOperation for OpenOperation<Context>
             })
             .collect::<Result<Vec<_>>>()?;
 
-        devices_with_entries.into_iter()
+        devices_with_entries
+            .into_iter()
             .map(|(ref mut device, ref entry, ref name_ctx)| self.open_entry(device, entry, name_ctx))
             .collect::<Result<Vec<_>>>()
-            .map(|_| ())  // TODO better pattern?
+            .map(|_| ()) // TODO better pattern?
     }
 }
 
 impl<Context> OpenOperation<Context>
-    where Context: context::ReaderContext + context::InputContext
+where
+    Context: context::ReaderContext + context::InputContext,
 {
     fn lookup_device_paths(&self) -> Result<Vec<PathBuf>> {
         // TODO - same comment in register.rs - better way to convert Vec<String> -> &[&str]
         let device_paths_or_uuids: Vec<&str> = self.device_paths_or_uuids.iter().map(|s| s.as_ref()).collect();
         // killed by the ::<>
         let mut device_map = self.context.resolve_paths_or_uuids(&device_paths_or_uuids);
-        let res = device_map
-            .drain()
-            .map(|kv| kv.1)
-            .collect::<context::Result<Vec<_>>>()?;
+        let res = device_map.drain().map(|kv| kv.1).collect::<context::Result<Vec<_>>>()?;
         Ok(res)
     }
 
@@ -90,7 +93,10 @@ impl<Context> OpenOperation<Context>
     fn validate_open_entry<'a>(&self, db_entry: &'a DbEntry, name_ctx: &NamingContext) -> Result<&'a DbEntry> {
         let proposed_name = name_ctx.device_name(self.name.as_ref(), db_entry.volume_id());
         if Disks::is_device_mapped(&proposed_name) {
-            Err(OperationError::ValidationFailed(format!("Device '{}' is already mapped!", proposed_name)))
+            Err(OperationError::ValidationFailed(format!(
+                "Device '{}' is already mapped!",
+                proposed_name
+            )))
         } else {
             Ok(db_entry)
         }
@@ -107,38 +113,52 @@ impl<Context> OpenOperation<Context>
 
     fn open_keyfile(&self, cd: &mut LuksDevice, db_entry: &DbEntry, name: &str) -> Result<Keyslot> {
         if let &DbEntry::KeyfileEntry { ref key_file, .. } = db_entry {
-            self.context
-                .read_keyfile(key_file)
-                .map_err(From::from)
-                .and_then(|key| cd.activate(&name, key.as_slice()).map_err(|e| From::from((cd.path(), e))))
+            self.context.read_keyfile(key_file).map_err(From::from).and_then(|key| {
+                cd.activate(&name, key.as_slice())
+                    .map_err(|e| From::from((cd.path(), e)))
+            })
         } else {
-            Err(OperationError::BugExplanation(format!("Expected KeyfileEntry, but got {:?}", db_entry)))
+            Err(OperationError::BugExplanation(format!(
+                "Expected KeyfileEntry, but got {:?}",
+                db_entry
+            )))
         }
     }
 
     fn open_passphrase(&self, cd: &mut LuksDevice, db_entry: &DbEntry, name: &str) -> Result<Keyslot> {
         if let &DbEntry::PassphraseEntry { .. } = db_entry {
             let prompt = format!("Please enter passphrase to open '{}':", name);
-            self.context
-                .read_password(&prompt)
-                .map_err(From::from)
-                .and_then(|key| cd.activate(&name, key.as_slice()).map_err(|e| From::from((cd.path(), e))))
+            self.context.read_password(&prompt).map_err(From::from).and_then(|key| {
+                cd.activate(&name, key.as_slice())
+                    .map_err(|e| From::from((cd.path(), e)))
+            })
         } else {
-            Err(OperationError::BugExplanation(format!("Expected PassphraseEntry, but got {:?}", db_entry)))
+            Err(OperationError::BugExplanation(format!(
+                "Expected PassphraseEntry, but got {:?}",
+                db_entry
+            )))
         }
     }
 
     fn open_yubikey(&self, cd: &mut LuksDevice, db_entry: &DbEntry, name: &str) -> Result<Keyslot> {
-        if let &DbEntry::YubikeyEntry { ref slot, ref entry_type, ref volume_id } = db_entry {
+        if let &DbEntry::YubikeyEntry {
+            ref slot,
+            ref entry_type,
+            ref volume_id,
+        } = db_entry
+        {
             self.context
-                .read_yubikey(Some(name),
-                              &volume_id.id.uuid,
-                              slot.clone(),
-                              entry_type.clone())
+                .read_yubikey(Some(name), &volume_id.id.uuid, slot.clone(), entry_type.clone())
                 .map_err(From::from)
-                .and_then(|key| cd.activate(&name, key.as_slice()).map_err(|e| From::from((cd.path(), e))))
+                .and_then(|key| {
+                    cd.activate(&name, key.as_slice())
+                        .map_err(|e| From::from((cd.path(), e)))
+                })
         } else {
-            Err(OperationError::BugExplanation(format!("Expected YubikeyEntry, but got {:?}", db_entry)))
+            Err(OperationError::BugExplanation(format!(
+                "Expected YubikeyEntry, but got {:?}",
+                db_entry
+            )))
         }
     }
 }
@@ -162,7 +182,10 @@ pub mod tests {
             is_single_device: true,
             device_index: 42,
         };
-        let multi_context = NamingContext { is_single_device: false, ..single_context };
+        let multi_context = NamingContext {
+            is_single_device: false,
+            ..single_context
+        };
 
         expect!(single_context.device_name(None, &volume_id)).to(be_equal_to(expected_name.clone()));
         expect!(multi_context.device_name(None, &volume_id)).to(be_equal_to(expected_name.clone()));
@@ -177,7 +200,10 @@ pub mod tests {
             is_single_device: true,
             device_index: 42,
         };
-        let multi_context = NamingContext { is_single_device: false, ..single_context };
+        let multi_context = NamingContext {
+            is_single_device: false,
+            ..single_context
+        };
 
         expect!(single_context.device_name(foobar.as_ref(), &volume_id)).to(be_equal_to("foobar"));
         expect!(multi_context.device_name(foobar.as_ref(), &volume_id)).to(be_equal_to("foobar_42"));
@@ -192,7 +218,10 @@ pub mod tests {
             is_single_device: true,
             device_index: 21,
         };
-        let multi_context = NamingContext { is_single_device: false, ..single_context };
+        let multi_context = NamingContext {
+            is_single_device: false,
+            ..single_context
+        };
 
         expect!(single_context.device_name(None, &volume_id)).to(be_equal_to("foo"));
         expect!(single_context.device_name(foobar.as_ref(), &volume_id)).to(be_equal_to("foobar"));

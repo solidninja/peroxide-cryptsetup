@@ -1,6 +1,6 @@
-use std::path::Path;
 use std::fs;
 use std::io;
+use std::path::Path;
 use std::path::PathBuf;
 use std::result;
 use std::time::Duration;
@@ -12,9 +12,8 @@ use cryptsetup_rs;
 pub use cryptsetup_rs::Luks1CryptDeviceHandle as CryptDevice;
 
 pub use io::KeyWrapper;
-use io::{FileExtensions, Disks, TerminalPrompt};
-use model::{DbLocation, PeroxideDb, YubikeySlot, YubikeyEntryType};
-
+use io::{Disks, FileExtensions, TerminalPrompt};
+use model::{DbLocation, PeroxideDb, YubikeyEntryType, YubikeySlot};
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -23,10 +22,7 @@ pub enum Error {
     KeyfileInputError { cause: io::Error },
     PasswordInputError { cause: io::Error },
     DatabaseIoError { path: PathBuf, cause: io::Error },
-    DiskIoError {
-        path: Option<PathBuf>,
-        cause: io::Error,
-    },
+    DiskIoError { path: Option<PathBuf>, cause: io::Error },
     YubikeyError { message: String },
     UnknownCryptoError,
     FeatureNotAvailable,
@@ -45,7 +41,13 @@ pub trait PasswordInput: Sized {
 }
 
 pub trait YubikeyInput: PasswordInput {
-    fn read_yubikey(&self, name: Option<&str>, uuid: &uuid::Uuid, slot: YubikeySlot, entry_type: YubikeyEntryType) -> Result<KeyWrapper>;
+    fn read_yubikey(
+        &self,
+        name: Option<&str>,
+        uuid: &uuid::Uuid,
+        slot: YubikeySlot,
+        entry_type: YubikeyEntryType,
+    ) -> Result<KeyWrapper>;
 }
 
 pub trait DiskSelector {
@@ -105,28 +107,24 @@ impl PasswordInput for MainContext {
 #[cfg(not(feature = "yubikey"))]
 impl YubikeyInput for MainContext {
     #[allow(unused)]
-    fn read_yubikey(&self, name: Option<&str>, uuid: &uuid::Uuid, slot: YubikeySlot, entry_type: YubikeyEntryType) -> Result<KeyWrapper> {
+    fn read_yubikey(
+        &self,
+        name: Option<&str>,
+        uuid: &uuid::Uuid,
+        slot: YubikeySlot,
+        entry_type: YubikeyEntryType,
+    ) -> Result<KeyWrapper> {
         Err(Error::FeatureNotAvailable)
     }
 }
 
 impl DiskSelector for MainContext {
     fn all_disk_uuids(&self) -> Result<Vec<uuid::Uuid>> {
-        Disks::all_disk_uuids().map_err(|err| {
-            Error::DiskIoError {
-                path: None,
-                cause: err,
-            }
-        })
+        Disks::all_disk_uuids().map_err(|err| Error::DiskIoError { path: None, cause: err })
     }
 
     fn disk_uuid_path(&self, uuid: &uuid::Uuid) -> Result<PathBuf> {
-        Disks::disk_uuid_path(uuid).map_err(|err| {
-            Error::DiskIoError {
-                path: None,
-                cause: err,
-            }
-        })
+        Disks::disk_uuid_path(uuid).map_err(|err| Error::DiskIoError { path: None, cause: err })
     }
 }
 
@@ -134,11 +132,9 @@ impl PeroxideDbReader for MainContext {
     fn open_peroxide_db(&self) -> Result<PeroxideDb> {
         fs::File::open(&self.db_location.path)
             .and_then(|file| PeroxideDb::from(file))
-            .map_err(|err| {
-                Error::DatabaseIoError {
-                    path: self.db_location.path.clone(),
-                    cause: err,
-                }
+            .map_err(|err| Error::DatabaseIoError {
+                path: self.db_location.path.clone(),
+                cause: err,
             })
     }
 }
@@ -147,11 +143,9 @@ impl PeroxideDbWriter for MainContext {
     fn save_peroxide_db(&self, db: &PeroxideDb) -> Result<()> {
         fs::File::create(&self.db_location.path)
             .and_then(|mut file| db.save(&mut file))
-            .map_err(|err| {
-                Error::DatabaseIoError {
-                    path: self.db_location.path.clone(),
-                    cause: err,
-                }
+            .map_err(|err| Error::DatabaseIoError {
+                path: self.db_location.path.clone(),
+                cause: err,
             })
     }
 }

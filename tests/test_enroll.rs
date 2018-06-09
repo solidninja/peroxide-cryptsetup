@@ -6,8 +6,8 @@ use cryptsetup_rs;
 use cryptsetup_rs::{CryptDevice, Luks1CryptDevice};
 
 use peroxide_cryptsetup::context::PeroxideDbReader;
-use peroxide_cryptsetup::model::{DbType, DbEntry, DbEntryType, VolumeId};
-use peroxide_cryptsetup::operation::{PerformCryptOperation, EnrollOperation, NewContainerParameters};
+use peroxide_cryptsetup::model::{DbEntry, DbEntryType, DbType, VolumeId};
+use peroxide_cryptsetup::operation::{EnrollOperation, NewContainerParameters, PerformCryptOperation};
 
 use support::*;
 
@@ -28,7 +28,9 @@ fn test_enroll_new_device_with_keyfile() {
         key_bits: 512,
     };
     let keyfile_content = [0xB, 0xA, 0xA, 0xA];
-    let keyfile_temp_file = temp_context.write_keyfile(Some(Path::new("enroll_keyfile")), &keyfile_content).unwrap();
+    let keyfile_temp_file = temp_context
+        .write_keyfile(Some(Path::new("enroll_keyfile")), &keyfile_content)
+        .unwrap();
     let keyfile_path = keyfile_temp_file.relative_to(&temp_context);
 
     let enroll_op = EnrollOperation::<TemporaryDirContext, TemporaryDirContext> {
@@ -63,7 +65,6 @@ fn test_enroll_new_device_with_keyfile() {
     };
 
     expect!(db.entries.first()).to(be_some().value(&expected_entry));
-
 
     // TODO - try to verify the keyslot parameters but there's no api it seems
 }
