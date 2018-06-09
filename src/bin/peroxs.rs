@@ -1,6 +1,5 @@
 #![deny(warnings)]
 #[warn(unused_must_use)]
-
 extern crate docopt;
 extern crate peroxide_cryptsetup;
 
@@ -10,20 +9,21 @@ extern crate serde_derive;
 // TODO - improve the logging story?
 extern crate env_logger;
 
-use std::path::{Path, PathBuf};
 use std::env;
 use std::fmt;
-use std::io;
 use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::result;
 
 use docopt::Docopt;
 
-use peroxide_cryptsetup::model::{OpenOperation, EnrollOperation, NewDatabaseOperation, ListOperation,
-                                 CryptOperation, PeroxideDb, DbLocation, DbEntryType, DbType,
-                                 NewContainerParameters, YubikeyEntryType, RegisterOperation};
 use peroxide_cryptsetup::context::MainContext;
+use peroxide_cryptsetup::model::{
+    CryptOperation, DbEntryType, DbLocation, DbType, EnrollOperation, ListOperation, NewContainerParameters, NewDatabaseOperation,
+    OpenOperation, PeroxideDb, RegisterOperation, YubikeyEntryType,
+};
 
 type Result<T> = result::Result<T, CmdError>;
 
@@ -126,20 +126,16 @@ fn _guess_db_path() -> io::Result<PathBuf> {
 }
 
 fn get_db_path(arg_db: Option<PathBuf>) -> io::Result<PathBuf> {
-    arg_db.map(|p| Ok(p.clone()))
-        .unwrap_or_else(_guess_db_path)
+    arg_db.map(|p| Ok(p.clone())).unwrap_or_else(_guess_db_path)
 }
 
 fn get_db_type<P: AsRef<Path>>(db_path: &P) -> io::Result<DbType> {
-    fs::File::open(db_path)
-        .and_then(PeroxideDb::from)
-        .map(|db| db.db_type.clone())
+    fs::File::open(db_path).and_then(PeroxideDb::from).map(|db| db.db_type.clone())
 }
 
 fn get_db_location(at_path: Option<PathBuf>, maybe_db_type: Option<&DbType>) -> io::Result<DbLocation> {
     let db_path = get_db_path(at_path)?;
-    let db_type = maybe_db_type.map(|t| Ok(t.clone()))
-        .unwrap_or_else(|| get_db_type(&db_path))?;
+    let db_type = maybe_db_type.map(|t| Ok(t.clone())).unwrap_or_else(|| get_db_type(&db_path))?;
     Ok(DbLocation {
         path: db_path,
         db_type: db_type,
@@ -152,7 +148,9 @@ fn get_backup_db_location(at_path: Option<PathBuf>) -> Option<DbLocation> {
 
 fn get_new_container_parameters(args: &Args) -> Option<NewContainerParameters> {
     if args.cmd_new {
-        let cipher = args.flag_cipher.as_ref().map_or_else(|| panic!("Must supply a cipher string"), |s| s.clone());
+        let cipher = args.flag_cipher
+            .as_ref()
+            .map_or_else(|| panic!("Must supply a cipher string"), |s| s.clone());
         let hash = args.flag_hash.as_ref().map_or_else(|| panic!("Must supply a hash"), |s| s.clone());
         let key_bits = args.flag_key_bits.unwrap_or_else(|| panic!("Must supply key bits"));
         Some(NewContainerParameters {
@@ -243,21 +241,23 @@ fn get_operation(args: &Args) -> Result<CryptOperation> {
     let db_type = args.arg_db_type.as_ref().map(|s| match s.as_ref() {
         "operation" => DbType::Operation,
         "backup" => DbType::Backup,
-        _ => panic!("Unknown db_type!")
+        _ => panic!("Unknown db_type!"),
     });
-    let db_location = get_db_location(args.arg_db.as_ref().map(PathBuf::from),
-                                      db_type.as_ref())
-        .map_err(|err| CmdError::DatabaseNotAvailable(err))?;
+    let db_location =
+        get_db_location(args.arg_db.as_ref().map(PathBuf::from), db_type.as_ref()).map_err(|err| CmdError::DatabaseNotAvailable(err))?;
     let context = MainContext::new(db_location);
     let maybe_paths = args.arg_device_or_uuid.clone();
 
     match args {
         _ if args.cmd_enroll => Ok(_enroll_operation(args, context, maybe_paths)),
         _ if args.cmd_init => Ok(CryptOperation::NewDatabase(NewDatabaseOperation { context: context })),
-        _ if args.cmd_list => Ok(CryptOperation::List(ListOperation { context: context, only_available: !args.flag_all })),
+        _ if args.cmd_list => Ok(CryptOperation::List(ListOperation {
+            context: context,
+            only_available: !args.flag_all,
+        })),
         _ if args.cmd_open => Ok(_open_operation(args, context, maybe_paths)),
         _ if args.cmd_register => Ok(_register_operation(args, context, maybe_paths)),
-        _ => Err(CmdError::UnrecognisedOperation)
+        _ => Err(CmdError::UnrecognisedOperation),
     }
 }
 

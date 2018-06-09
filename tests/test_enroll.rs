@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use expectest::prelude::*;
 
-use cryptsetup_rs::device::{CryptDevice, crypt_device_type};
+use cryptsetup_rs;
+use cryptsetup_rs::{CryptDevice, Luks1CryptDevice};
+
 use peroxide_cryptsetup::context::PeroxideDbReader;
 use peroxide_cryptsetup::model::{DbType, DbEntry, DbEntryType, VolumeId};
 use peroxide_cryptsetup::operation::{PerformCryptOperation, EnrollOperation, NewContainerParameters};
@@ -43,25 +45,25 @@ fn test_enroll_new_device_with_keyfile() {
     };
     expect!(enroll_op.apply()).to(be_ok());
 
-    // verify the db got written correctly
-    let crypt_device = CryptDevice::new(device_file.path().to_path_buf()).unwrap();
-    expect!(crypt_device.load(crypt_device_type::LUKS1)).to(be_ok());
-    expect!(crypt_device.uuid()).to(be_some());
+    // check we can load the crypt device
+    let crypt_device = cryptsetup_rs::open(device_file.path()).unwrap().luks1().unwrap();
 
+    // verify crypt device got setup correctly
+    expect!(crypt_device.cipher()).to(be_equal_to("serpent"));
+    expect!(crypt_device.cipher_mode()).to(be_equal_to("xts-plain"));
+    expect!(crypt_device.volume_key_size()).to(be_equal_to(64));
+
+    // verify the db got written correctly
     let db = enroll_op.context.open_peroxide_db().unwrap();
     expect!(db.entries.iter()).to(have_count(1));
 
     let expected_entry = DbEntry::KeyfileEntry {
         key_file: PathBuf::from("enroll_keyfile").join(keyfile_path.file_name().and_then(|n| n.to_str()).unwrap()),
-        volume_id: VolumeId::new(Some("a_name".to_string()), crypt_device.uuid().unwrap()),
+        volume_id: VolumeId::new(Some("a_name".to_string()), crypt_device.uuid()),
     };
 
     expect!(db.entries.first()).to(be_some().value(&expected_entry));
 
-    // verify crypt device got setup correctly
-    expect!(crypt_device.cipher()).to(be_some().value("serpent"));
-    expect!(crypt_device.cipher_mode()).to(be_some().value("xts-plain"));
-    expect!(crypt_device.volume_key_size()).to(be_some().value(64));
 
     // TODO - try to verify the keyslot parameters but there's no api it seems
 }

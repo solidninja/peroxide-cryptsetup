@@ -8,16 +8,15 @@ use tempfile::NamedTempFile;
 use tempdir::TempDir;
 use uuid;
 
-use cryptsetup_rs::device::{CryptDevice, crypt_rng_type};
+use cryptsetup_rs;
 use peroxide_cryptsetup::context;
 use peroxide_cryptsetup::context::{MainContext, HasDbLocation, PeroxideDbReader, PeroxideDbWriter, KeyfileInput, ReaderContext,
-                                   WriterContext, InputContext, PasswordInput, YubikeyInput, DiskSelector, KeyWrapper};
-use peroxide_cryptsetup::model::{DbLocation, DbType, PeroxideDb, YubikeySlot, YubikeyEntryType};
-use peroxide_cryptsetup::operation::ApplyCryptDeviceOptions;
+                                   WriterContext, InputContext, PasswordInput, DiskSelector, KeyWrapper};
+use peroxide_cryptsetup::model::{DbLocation, DbType, PeroxideDb};
 
 pub fn setup() {
     env_logger::init().unwrap_or(());
-    CryptDevice::enable_debug(true);
+    cryptsetup_rs::enable_debug(true);
 }
 
 #[allow(dead_code)]
@@ -60,15 +59,6 @@ impl TemporaryDirContext {
             try!(temp_file.seek(io::SeekFrom::Start(0)));
             Ok(temp_file)
         })
-    }
-}
-
-impl ApplyCryptDeviceOptions for TemporaryDirContext {
-    fn apply_options(cd: CryptDevice) -> CryptDevice {
-        let mut device = cd;
-        info!("Setting crypt_rng_type to use urandom");
-        device.set_rng_type(crypt_rng_type::CRYPT_RNG_URANDOM);
-        device
     }
 }
 

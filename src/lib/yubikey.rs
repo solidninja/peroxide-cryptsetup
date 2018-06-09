@@ -173,15 +173,13 @@ mod hybrid {
     fn derive_challenge_key(challenge: &[u8], uuid: &Uuid) -> Result<[u8; SHA1_BLOCK_LENGTH]> {
         let mut derived_key = [0u8; SHA1_BLOCK_LENGTH];
         let salt = salt_from_uuid(uuid);
-        try!{
-            scryptsalsa208sha256::derive_key(&mut derived_key,
-                                             challenge,
-                                             &salt,
-                                             scryptsalsa208sha256::OpsLimit(PWHASH_OPSLIMIT),
-                                             scryptsalsa208sha256::MemLimit(PWHASH_MEMLIMIT))
-                .map_err(|_| Error::UnknownCryptoError)
-                .map(|_| ())
-        }
+        scryptsalsa208sha256::derive_key(&mut derived_key,
+                                         challenge,
+                                         &salt,
+                                         scryptsalsa208sha256::OpsLimit(PWHASH_OPSLIMIT),
+                                         scryptsalsa208sha256::MemLimit(PWHASH_MEMLIMIT))
+            .map_err(|_| Error::UnknownCryptoError)
+            .map(|_| ())?;
         Ok(derived_key)
     }
 
@@ -201,7 +199,7 @@ mod hybrid {
                                                                   uuid: &Uuid)
                                                                   -> Result<KeyWrapper> {
         // TODO: explain in more detail the reasoning behind home-brewed crypto...
-        sodiumoxide::init();
+        sodiumoxide::init().expect("libsodium to be initialised");
 
         let response = try!(hash_challenge_and_then_response(dev, slot, challenge, uuid));
         let sha256::Digest(response_hash) = sha256::hash(&response);

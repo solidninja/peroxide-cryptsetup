@@ -1,20 +1,21 @@
 use std::io;
 use std::fmt;
-use std::fs;
 use std::path::{PathBuf, Path};
 use std::result;
 use std::convert;
 use std::str::FromStr;
 use std::collections::HashMap;
 
-
-use errno::Errno;
+use cryptsetup_rs;
 use uuid;
-use cryptsetup_rs::device::CryptDevice;
-use cryptsetup_rs::{BlockDevice, LuksHeader};
 
 use context;
 use model::{DbEntryType, VolumeId, YubikeySlot, YubikeyEntryType};
+
+trait LuksDevice: cryptsetup_rs::CryptDevice + cryptsetup_rs::Luks1CryptDevice { }
+
+impl LuksDevice for cryptsetup_rs::Luks1CryptDeviceHandle { }
+
 
 pub type Result<T> = result::Result<T, OperationError>;
 
@@ -31,7 +32,7 @@ pub struct ListOperation<Context: context::ReaderContext + context::DiskSelector
 
 #[derive(Debug)]
 pub struct OpenOperation<Context>
-    where Context: context::ReaderContext + context::InputContext + context::DiskSelector + ApplyCryptDeviceOptions
+    where Context: context::ReaderContext + context::InputContext
 {
     pub context: Context,
     pub device_paths_or_uuids: Vec<String>,
@@ -40,7 +41,7 @@ pub struct OpenOperation<Context>
 
 #[derive(Debug)]
 pub struct RegisterOperation<Context>
-    where Context: context::WriterContext + context::DiskSelector + ApplyCryptDeviceOptions {
+    where Context: context::WriterContext {
     pub context: Context,
     pub entry_type: DbEntryType,
     pub device_paths_or_uuids: Vec<String>,
@@ -50,7 +51,7 @@ pub struct RegisterOperation<Context>
 
 #[derive(Debug)]
 pub struct EnrollOperation<Context, BackupContext>
-    where Context: context::WriterContext + context::InputContext + context::DiskSelector + ApplyCryptDeviceOptions,
+    where Context: context::WriterContext + context::InputContext,
           BackupContext: context::ReaderContext + context::InputContext
 {
     pub context: Context,
@@ -170,13 +171,10 @@ impl<'a> convert::From<&'a context::Error> for OperationError {
     }
 }
 
-impl<P: AsRef<Path>> convert::From<(P, Errno)> for OperationError {
-    fn from(pair: (P, Errno)) -> OperationError {
-        let (ref path, crypt_error) = pair;
-        // there's no .to_path_buf() for &P
-        let mut path_buf = PathBuf::new();
-        path_buf.push(path);
-        OperationError::CryptOperationFailed(path_buf, format!("{}", crypt_error))
+impl<P: AsRef<Path>> convert::From<(P, cryptsetup_rs::Error)> for OperationError {
+    fn from(pair: (P, cryptsetup_rs::Error)) -> OperationError {
+        let (path, crypt_error) = pair;
+        OperationError::CryptOperationFailed(path.as_ref().to_owned(), format!("{:?}", crypt_error))
     }
 }
 
@@ -196,9 +194,8 @@ impl FromStr for PathOrUuid {
 }
 
 trait UserDiskLookup {
-    fn resolve_paths_or_uuids<'a>(&self, paths_or_uuids: &'a [String]) -> HashMap<&'a String, context::Result<PathBuf>>;
-    fn lookup_devices<'a>(&self, paths_or_uuids: &'a [String]) -> Result<Vec<CryptDevice>>;
-    fn uuid_of_path<P>(&self, path: &P) -> Result<uuid::Uuid> where P: AsRef<Path>;
+    fn resolve_paths_or_uuids<'a>(&self, paths_or_uuids: &'a [&'a str]) -> HashMap<&'a str, context::Result<PathBuf>>;
+    fn uuid_of_path<P: AsRef<Path>>(&self, path: &P) -> Result<uuid::Uuid>;
 }
 
 trait PasswordPromptString {
@@ -207,38 +204,27 @@ trait PasswordPromptString {
 }
 
 impl PasswordPromptString for VolumeId {
+    fn prompt_string(&self) -> String {
+        format!("Please enter existing passphrase for {}: ",
+                self.prompt_name())
+    }
+
     fn prompt_name(&self) -> String {
         self.name
             .as_ref()
             .map(|name| format!("'{}'", name))
             .unwrap_or_else(|| format!("uuid={}", self.id.uuid))
     }
-
-    fn prompt_string(&self) -> String {
-        format!("Please enter existing passphrase for {}: ",
-                self.prompt_name())
-    }
 }
 
-pub trait ApplyCryptDeviceOptions {
-    fn apply_options(cd: CryptDevice) -> CryptDevice;
-}
-
-impl ApplyCryptDeviceOptions for context::MainContext {
-    #[inline]
-    fn apply_options(cd: CryptDevice) -> CryptDevice {
-        cd
-    }
-}
-
-impl<C> UserDiskLookup for C
-    where C: context::DiskSelector + ApplyCryptDeviceOptions
+impl<Context> UserDiskLookup for Context
+    where Context: context::DiskSelector
 {
-    fn resolve_paths_or_uuids<'a>(&self, paths_or_uuids: &'a [String]) -> HashMap<&'a String, context::Result<PathBuf>> {
+    fn resolve_paths_or_uuids<'a>(&self, paths_or_uuids: &'a [&'a str]) -> HashMap<&'a str, context::Result<PathBuf>> {
         paths_or_uuids.iter()
             .map(|s| (s, PathOrUuid::from_str(s).unwrap()))
             .map(|(s, path_or_uuid)| {
-                (s,
+                (*s,
                  match path_or_uuid {
                      PathOrUuid::Path(path) => Ok(path),
                      PathOrUuid::Uuid(uuid) => self.disk_uuid_path(&uuid),
@@ -247,23 +233,9 @@ impl<C> UserDiskLookup for C
             .collect()
     }
 
-    fn lookup_devices<'a>(&self, paths_or_uuids: &'a [String]) -> Result<Vec<CryptDevice>> {
-        self.resolve_paths_or_uuids(paths_or_uuids)
-            .values()
-            .map(|res| res.as_ref().map_err(From::from))
-            .map(|maybe_path| {
-                maybe_path.and_then(|device_path| {
-                    CryptDevice::new(device_path.clone())
-                        .map(Self::apply_options)
-                        .map_err(|err| From::from((device_path, err)))
-                })
-            })
-            .collect()
-    }
-    fn uuid_of_path<P>(&self, path: &P) -> Result<uuid::Uuid> where P: AsRef<Path> {
-        let f = fs::File::open(path).map_err(|e| context::Error::DiskIoError { path: Some(path.as_ref().to_owned()), cause: e })?;
-        let header = BlockDevice::read_luks_header(f).map_err(|e| OperationError::InvalidUuid(format!("Unable to read LUKS header from {}: {:?}", path.as_ref().to_string_lossy(), e)))?;
-        header.uuid().map_err(|e| OperationError::InvalidUuid(format!("Unable to parse UUID from LUKS header of {}: {:?}", path.as_ref().to_string_lossy(), e)))
+    fn uuid_of_path<P: AsRef<Path>>(&self, path: &P) -> Result<uuid::Uuid> {
+        cryptsetup_rs::luks1_uuid(path)
+            .map_err(|e| OperationError::InvalidUuid(format!("Unable to parse UUID from LUKS header of {}: {:?}", path.as_ref().to_string_lossy(), e)))
     }
 }
 

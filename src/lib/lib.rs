@@ -1,16 +1,15 @@
 #![deny(warnings)]
 #[warn(unused_must_use)]
-
 #[macro_use]
 extern crate serde_derive;
 
-extern crate serde;
-extern crate serde_json;
-extern crate uuid;
 extern crate cryptsetup_rs;
 extern crate errno;
-extern crate termios;
 extern crate libc;
+extern crate serde;
+extern crate serde_json;
+extern crate termios;
+extern crate uuid;
 
 extern crate log;
 
@@ -19,11 +18,11 @@ extern crate term;
 #[macro_use]
 extern crate prettytable;
 
+pub mod context;
 pub mod db;
+mod io;
 pub mod model;
 pub mod operation;
-mod io;
-pub mod context;
 
 #[cfg(feature = "yubikey")]
 mod yubikey;

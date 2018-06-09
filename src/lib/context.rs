@@ -7,10 +7,14 @@ use std::time::Duration;
 
 use uuid;
 
+use cryptsetup_rs;
+
+pub use cryptsetup_rs::Luks1CryptDeviceHandle as CryptDevice;
+
 pub use io::KeyWrapper;
 use io::{FileExtensions, Disks, TerminalPrompt};
 use model::{DbLocation, PeroxideDb, YubikeySlot, YubikeyEntryType};
-use cryptsetup_rs::device::CryptDevice;
+
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -72,7 +76,7 @@ impl MainContext {
     }
 
     pub fn trace_on() {
-        CryptDevice::enable_debug(true);
+        cryptsetup_rs::enable_debug(true);
     }
 }
 
@@ -152,7 +156,7 @@ impl PeroxideDbWriter for MainContext {
     }
 }
 
-pub trait ReaderContext: HasDbLocation + PeroxideDbReader {}
+pub trait ReaderContext: HasDbLocation + PeroxideDbReader + DiskSelector {}
 pub trait WriterContext: ReaderContext + PeroxideDbWriter {}
 pub trait InputContext: KeyfileInput + PasswordInput + YubikeyInput {}
 

@@ -56,7 +56,7 @@ pub struct VolumeId {
 
 impl VolumeId {
 	pub fn new(name: Option<String>, uuid: Uuid) -> VolumeId {
-		VolumeId { name: name, id: VolumeUuid { uuid: uuid } }
+		VolumeId { name, id: VolumeUuid { uuid } }
 	}
 }
 
@@ -81,7 +81,7 @@ impl PeroxideDb {
     pub fn new(db_type: DbType) -> PeroxideDb {
         PeroxideDb {
             entries: vec![],
-            db_type: db_type,
+            db_type,
             version: DB_VERSION,
         }
     }
