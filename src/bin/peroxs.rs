@@ -6,7 +6,6 @@ extern crate peroxide_cryptsetup;
 #[macro_use]
 extern crate serde_derive;
 
-// TODO - improve the logging story?
 extern crate env_logger;
 
 use std::env;
@@ -142,10 +141,7 @@ fn get_db_location(at_path: Option<PathBuf>, maybe_db_type: Option<&DbType>) -> 
     let db_type = maybe_db_type
         .map(|t| Ok(t.clone()))
         .unwrap_or_else(|| get_db_type(&db_path))?;
-    Ok(DbLocation {
-        path: db_path,
-        db_type: db_type,
-    })
+    Ok(DbLocation { path: db_path, db_type })
 }
 
 fn get_backup_db_location(at_path: Option<PathBuf>) -> Option<DbLocation> {
@@ -161,11 +157,7 @@ fn get_new_container_parameters(args: &Args) -> Option<NewContainerParameters> {
             .as_ref()
             .map_or_else(|| panic!("Must supply a hash"), |s| s.clone());
         let key_bits = args.flag_key_bits.unwrap_or_else(|| panic!("Must supply key bits"));
-        Some(NewContainerParameters {
-            cipher: cipher,
-            hash: hash,
-            key_bits: key_bits,
-        })
+        Some(NewContainerParameters { cipher, hash, key_bits })
     } else {
         None
     }
@@ -208,16 +200,16 @@ fn _enroll_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<
     let maybe_keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
     let yubikey_entry_type = get_yubikey_entry_type(args);
     CryptOperation::Enroll(EnrollOperation {
-        context: context,
-        entry_type: entry_type,
-        new_container: new_container,
-        device_paths_or_uuids: device_paths_or_uuids,
-        iteration_ms: iteration_ms,
+        context,
+        entry_type,
+        new_container,
+        device_paths_or_uuids,
+        iteration_ms,
         keyfile: maybe_keyfile,
         backup_context: backup_db_context,
-        name: name,
+        name,
         yubikey_slot: args.flag_slot.clone(),
-        yubikey_entry_type: yubikey_entry_type,
+        yubikey_entry_type,
     })
 }
 
@@ -226,9 +218,9 @@ fn _open_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<St
     let name = args.flag_name.clone();
 
     CryptOperation::Open(OpenOperation {
-        context: context,
-        device_paths_or_uuids: device_paths_or_uuids,
-        name: name,
+        context,
+        device_paths_or_uuids,
+        name,
     })
 }
 
@@ -239,11 +231,11 @@ fn _register_operation(args: &Args, context: MainContext, maybe_paths: Option<Ve
     let entry_type = get_entry_type(&args);
 
     CryptOperation::Register(RegisterOperation {
-        context: context,
-        device_paths_or_uuids: device_paths_or_uuids,
-        name: name,
+        context,
+        device_paths_or_uuids,
+        name,
         keyfile: maybe_keyfile,
-        entry_type: entry_type,
+        entry_type,
     })
 }
 
@@ -260,9 +252,9 @@ fn get_operation(args: &Args) -> Result<CryptOperation> {
 
     match args {
         _ if args.cmd_enroll => Ok(_enroll_operation(args, context, maybe_paths)),
-        _ if args.cmd_init => Ok(CryptOperation::NewDatabase(NewDatabaseOperation { context: context })),
+        _ if args.cmd_init => Ok(CryptOperation::NewDatabase(NewDatabaseOperation { context })),
         _ if args.cmd_list => Ok(CryptOperation::List(ListOperation {
-            context: context,
+            context,
             only_available: !args.flag_all,
         })),
         _ if args.cmd_open => Ok(_open_operation(args, context, maybe_paths)),
