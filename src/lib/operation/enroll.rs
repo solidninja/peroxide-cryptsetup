@@ -199,7 +199,7 @@ where
                         .map(|ctx| {
                             ctx.read_yubikey(
                                 Some(&volume_id.prompt_name()),
-                                &volume_id.id.uuid,
+                                volume_id.uuid(),
                                 slot.clone(),
                                 entry_type.clone(),
                             )

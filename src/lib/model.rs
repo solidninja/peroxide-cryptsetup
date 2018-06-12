@@ -1,4 +1,4 @@
-pub use db::{DbEntry, DbEntryType, DbType, PeroxideDb, VolumeId, VolumeUuid, YubikeyEntryType, YubikeySlot};
+pub use db::{DbEntry, DbEntryType, DbType, PeroxideDb, VolumeId, YubikeyEntryType, YubikeySlot};
 pub use operation::{
     CryptOperation, EnrollOperation, ListOperation, NewContainerParameters, NewDatabaseOperation, OpenOperation,
     OperationError, RegisterOperation,

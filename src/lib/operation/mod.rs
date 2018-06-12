@@ -225,7 +225,7 @@ impl PasswordPromptString for VolumeId {
         self.name
             .as_ref()
             .map(|name| format!("'{}'", name))
-            .unwrap_or_else(|| format!("uuid={}", self.id.uuid))
+            .unwrap_or_else(|| format!("uuid={}", self.uuid()))
     }
 }
 

@@ -12,10 +12,7 @@ impl<Context: context::ReaderContext + context::DiskSelector> PerformCryptOperat
 
         // sort entries by name, then by uuid
         let mut entries = db.entries.clone();
-        entries.sort_by_key(|entry| {
-            let id = DbEntry::volume_id(entry).clone();
-            (id.name, id.id)
-        });
+        entries.sort_by_key(|entry| entry.volume_id().clone());
 
         let mut table = Table::new();
         table.add_row(row![b->"Name", b->"Type", b->"Uuid", b->"Disk"]);
@@ -38,7 +35,7 @@ where
     fn add_table_entry(&self, table: &mut Table, entry: &DbEntry) -> () {
         let id = DbEntry::volume_id(entry);
         let name = id.name.clone().unwrap_or("".to_string());
-        let uuid = format!("{}", id.id.uuid);
+        let uuid = format!("{}", id.uuid());
         let typ = match entry {
             &DbEntry::KeyfileEntry { .. } => "keyfile",
             &DbEntry::PassphraseEntry { .. } => "passphrase",
@@ -49,7 +46,7 @@ where
         };
 
         let maybe_path = self.context
-            .disk_uuid_path(&id.id.uuid)
+            .disk_uuid_path(&id.uuid())
             .ok()
             .and_then(|p| p.canonicalize().ok());
 

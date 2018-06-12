@@ -26,7 +26,7 @@ impl NamingContext {
                     name.clone()
                 }
             })
-            .unwrap_or_else(|| format!("uuid_{}", volume_id.id.uuid))
+            .unwrap_or_else(|| format!("uuid_{}", volume_id.uuid()))
     }
 }
 
@@ -148,7 +148,7 @@ where
         } = db_entry
         {
             self.context
-                .read_yubikey(Some(name), &volume_id.id.uuid, slot.clone(), entry_type.clone())
+                .read_yubikey(Some(name), &volume_id.uuid(), slot.clone(), entry_type.clone())
                 .map_err(From::from)
                 .and_then(|key| {
                     cd.activate(&name, key.as_slice())

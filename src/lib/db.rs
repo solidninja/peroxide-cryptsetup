@@ -1,4 +1,3 @@
-use std::cmp;
 use std::io;
 use std::io::{Read, Write};
 use std::path;
@@ -11,6 +10,7 @@ pub const DB_VERSION: u16 = 1;
 
 pub type Result<T> = io::Result<T>;
 
+// TODO - either justify the backup db type or get rid of it
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DbType {
     Operation,
@@ -56,10 +56,12 @@ pub enum DbEntry {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Ord, PartialOrd)]
 pub struct VolumeId {
     pub name: Option<String>,
-    pub id: VolumeUuid,
+    // Note this is necessary to preserve JSON compatibility with the pre-serde version of peroxide-cryptsetup
+    // that had its own serialiser for UUID types (and this workaround is easier than writing a custom Serde serialiser)
+    id: VolumeUuid,
 }
 
 impl VolumeId {
@@ -69,23 +71,15 @@ impl VolumeId {
             id: VolumeUuid { uuid },
         }
     }
+
+    pub fn uuid(&self) -> &Uuid {
+        &self.id.uuid
+    }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
-pub struct VolumeUuid {
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Ord, PartialOrd)]
+struct VolumeUuid {
     pub uuid: Uuid,
-}
-
-impl cmp::Ord for VolumeUuid {
-    fn cmp(&self, other: &VolumeUuid) -> cmp::Ordering {
-        self.uuid.cmp(&other.uuid)
-    }
-}
-
-impl cmp::PartialOrd for VolumeUuid {
-    fn partial_cmp(&self, other: &VolumeUuid) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 impl PeroxideDb {
@@ -123,8 +117,8 @@ impl DbEntry {
         }
     }
 
-    pub fn uuid<'a>(&'a self) -> &'a Uuid {
-        &self.volume_id().id.uuid
+    pub fn uuid(&self) -> &Uuid {
+        &self.volume_id().uuid()
     }
 }
 
