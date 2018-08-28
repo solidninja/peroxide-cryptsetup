@@ -1,14 +1,49 @@
+use std::env::current_dir;
+use std::fmt;
+use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
-use std::path;
+use std::path::{Path, PathBuf};
+use std::result;
 
 use uuid::Uuid;
 
 use serde_json;
 
+/// Current database version (used for future forward-compatibility)
 pub const DB_VERSION: u16 = 1;
 
-pub type Result<T> = io::Result<T>;
+/// Default database name
+pub const PEROXIDE_DB_NAME: &'static str = "peroxs-db.json";
+
+#[derive(Debug)]
+pub enum Error {
+    IoError(PathBuf, io::Error),
+    SerialisationError(serde_json::Error),
+}
+
+pub type Result<T> = result::Result<T, Error>;
+
+impl<P: AsRef<Path>> From<(P, io::Error)> for Error {
+    fn from(e: (P, io::Error)) -> Self {
+        Error::IoError(e.0.as_ref().to_path_buf(), e.1)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Error::SerialisationError(e)
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::IoError(ref path, ref e) => write!(f, "I/O error [database={}, cause={}]", path.display(), e),
+            Error::SerialisationError(ref e) => write!(f, "Database serialisation error [cause={}]", e),
+        }
+    }
+}
 
 // TODO - either justify the backup db type or get rid of it
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +67,7 @@ pub enum DbEntryType {
 }
 
 // FIXME move this to newtype
+// FIXME #[serde(flatten)]
 pub type YubikeySlot = u8;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
@@ -43,7 +79,7 @@ pub enum YubikeyEntryType {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum DbEntry {
     KeyfileEntry {
-        key_file: path::PathBuf,
+        key_file: PathBuf,
         volume_id: VolumeId,
     },
     PassphraseEntry {
@@ -77,6 +113,16 @@ impl VolumeId {
     }
 }
 
+impl fmt::Display for VolumeId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(ref name) = self.name {
+            write!(f, "Volume({}, {})", name, self.uuid())
+        } else {
+            write!(f, "Volume({})", self.uuid())
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Ord, PartialOrd)]
 struct VolumeUuid {
     pub uuid: Uuid,
@@ -91,20 +137,32 @@ impl PeroxideDb {
         }
     }
 
-    pub fn from<R>(reader: R) -> Result<PeroxideDb>
-    where
-        R: Read,
-    {
-        serde_json::de::from_reader(reader).map_err(|err| io::Error::new(io::ErrorKind::Other, format!("{}", err)))
+    /// Get the default location of the database (at the current directory called `peroxide-db.json`)
+    pub fn default_location() -> Result<PathBuf> {
+        current_dir()
+            .map(|p| p.join(PEROXIDE_DB_NAME))
+            .map_err(|e| (PathBuf::from("/invalid/current/dir"), e))
+            .map_err(From::from)
     }
 
-    pub fn save<W>(&self, writer: &mut W) -> Result<()>
-    where
-        W: Write,
-    {
-        let json = serde_json::to_string(self).unwrap();
-        writer.write_all(json.as_bytes())?;
-        Ok(())
+    /// Open a JSON-encoded database
+    pub fn open<R: Read>(reader: R) -> Result<PeroxideDb> {
+        serde_json::de::from_reader(reader).map_err(From::from)
+    }
+
+    /// Open a JSON-encoded database at the specified path
+    pub fn open_at<P: AsRef<Path>>(path: P) -> Result<PeroxideDb> {
+        PeroxideDb::open(File::open(path.as_ref()).map_err(|e| (path, e))?)
+    }
+
+    /// Write a JSON-encoded database
+    pub fn save<W: Write>(&self, writer: &mut W) -> Result<()> {
+        serde_json::to_writer(writer, self).map_err(From::from)
+    }
+
+    /// Write a JSON-encoded database to the specified path
+    pub fn save_to<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        self.save(&mut File::create(path.as_ref()).map_err(|e| (path, e))?)
     }
 }
 
@@ -172,7 +230,8 @@ pub mod tests {
             volume_id: VolumeId::new(None, Uuid::nil()),
         };
         expect!(serde_json::to_string(&entry)).to(be_ok().value(
-            r#"{"PassphraseEntry":{"volume_id":{"name":null,"id":{"uuid":"00000000-0000-0000-0000-000000000000"}}}}"#.to_string(),
+            r#"{"PassphraseEntry":{"volume_id":{"name":null,"id":{"uuid":"00000000-0000-0000-0000-000000000000"}}}}"#
+                .to_string(),
         ));
     }
 

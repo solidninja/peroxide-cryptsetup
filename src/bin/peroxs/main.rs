@@ -1,46 +1,34 @@
 #![deny(warnings)]
+#![deny(bare_trait_objects)]
 #[warn(unused_must_use)]
+
 extern crate docopt;
+extern crate env_logger;
+extern crate errno;
 extern crate peroxide_cryptsetup;
+extern crate uuid;
+
+#[macro_use]
+extern crate log;
+
+#[macro_use]
+extern crate prettytable;
 
 #[macro_use]
 extern crate serde_derive;
 
-extern crate env_logger;
-
 use std::env;
-use std::fmt;
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::exit;
-use std::result;
 
 use docopt::Docopt;
+use log::Level;
 
-use peroxide_cryptsetup::context::MainContext;
-use peroxide_cryptsetup::model::{
-    CryptOperation, DbEntryType, DbLocation, DbType, EnrollOperation, ListOperation, NewContainerParameters,
-    NewDatabaseOperation, OpenOperation, PeroxideDb, RegisterOperation, YubikeyEntryType,
-};
+use peroxide_cryptsetup::context::{Context, DeviceOps, MainContext};
+use peroxide_cryptsetup::db::{DbEntryType, DbType, PeroxideDb, YubikeyEntryType};
 
-type Result<T> = result::Result<T, CmdError>;
-
-enum CmdError {
-    DatabaseNotAvailable(io::Error),
-    UnrecognisedOperation,
-}
-
-impl fmt::Display for CmdError {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &CmdError::UnrecognisedOperation => write!(fmt, "Operation was not recognised. This is probably a bug."),
-            &CmdError::DatabaseNotAvailable(ref err) => {
-                write!(fmt, "No peroxs database file '{}' found: {}", PEROXIDE_DB_NAME, err)
-            }
-        }
-    }
-}
+mod operation;
+use operation::Result;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -120,50 +108,26 @@ struct Args {
     flag_slot: Option<u8>,
 }
 
-const PEROXIDE_DB_NAME: &'static str = "peroxs-db.json";
-
-fn _guess_db_path() -> io::Result<PathBuf> {
-    env::current_dir().map(|dir| dir.join(PEROXIDE_DB_NAME))
+fn db_path(args: &Args) -> Result<PathBuf> {
+    args.arg_db
+        .as_ref()
+        .map(PathBuf::from)
+        .map(Ok) // gwah!
+        .unwrap_or_else(|| PeroxideDb::default_location().map_err(From::from).map_err(From::<peroxide_cryptsetup::context::Error>::from))
 }
 
-fn get_db_path(arg_db: Option<PathBuf>) -> io::Result<PathBuf> {
-    arg_db.map(|p| Ok(p.clone())).unwrap_or_else(_guess_db_path)
-}
-
-fn get_db_type<P: AsRef<Path>>(db_path: &P) -> io::Result<DbType> {
-    fs::File::open(db_path)
-        .and_then(PeroxideDb::from)
-        .map(|db| db.db_type.clone())
-}
-
-fn get_db_location(at_path: Option<PathBuf>, maybe_db_type: Option<&DbType>) -> io::Result<DbLocation> {
-    let db_path = get_db_path(at_path)?;
-    let db_type = maybe_db_type
-        .map(|t| Ok(t.clone()))
-        .unwrap_or_else(|| get_db_type(&db_path))?;
-    Ok(DbLocation { path: db_path, db_type })
-}
-
-fn get_backup_db_location(at_path: Option<PathBuf>) -> Option<DbLocation> {
-    get_db_location(at_path, None).ok()
-}
-
-fn get_new_container_parameters(args: &Args) -> Option<NewContainerParameters> {
+fn new_container_parameters(args: &Args) -> Option<operation::enroll::NewContainerParameters> {
     if args.cmd_new {
-        let cipher = args.flag_cipher
-            .as_ref()
-            .map_or_else(|| panic!("Must supply a cipher string"), |s| s.clone());
-        let hash = args.flag_hash
-            .as_ref()
-            .map_or_else(|| panic!("Must supply a hash"), |s| s.clone());
-        let key_bits = args.flag_key_bits.unwrap_or_else(|| panic!("Must supply key bits"));
-        Some(NewContainerParameters { cipher, hash, key_bits })
+        let cipher = args.flag_cipher.as_ref().expect("Must supply a cipher string").clone();
+        let hash = args.flag_hash.as_ref().expect("Must supply a hash").clone();
+        let key_bits = args.flag_key_bits.expect("Must supply key bits");
+        Some(operation::enroll::NewContainerParameters { cipher, hash, key_bits })
     } else {
         None
     }
 }
 
-fn get_yubikey_entry_type(args: &Args) -> Option<YubikeyEntryType> {
+fn yubikey_entry_type(args: &Args) -> Option<YubikeyEntryType> {
     if args.cmd_yubikey {
         let entry_type = if args.cmd_hybrid {
             YubikeyEntryType::HybridChallengeResponse
@@ -179,7 +143,7 @@ fn get_yubikey_entry_type(args: &Args) -> Option<YubikeyEntryType> {
     }
 }
 
-fn get_entry_type(args: &Args) -> DbEntryType {
+fn db_entry_type(args: &Args) -> DbEntryType {
     match args {
         _ if args.cmd_passphrase => DbEntryType::Passphrase,
         _ if args.cmd_keyfile => DbEntryType::Keyfile,
@@ -188,108 +152,110 @@ fn get_entry_type(args: &Args) -> DbEntryType {
     }
 }
 
-fn _enroll_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<String>>) -> CryptOperation {
-    let backup_db_context =
-        get_backup_db_location(args.flag_backup_db.as_ref().map(PathBuf::from)).map(MainContext::new);
-    let new_container = get_new_container_parameters(args);
-    let iteration_ms = args.flag_iteration_ms
-        .unwrap_or_else(|| panic!("expecting iteration ms"));
-    let device_paths_or_uuids = maybe_paths.unwrap_or_else(|| panic!("expecting device paths or uuids"));
-    let entry_type = get_entry_type(&args);
+fn enroll<C: Context + DeviceOps>(args: &Args, ctx: &C, maybe_paths: Option<Vec<String>>) -> Result<()> {
+    let backup_context = args.flag_backup_db.as_ref().map(PathBuf::from).map(MainContext::new);
+    let new_container = new_container_parameters(args);
+    let iteration_ms = args.flag_iteration_ms.expect("iteration millis");
+    let device_paths_or_uuids = maybe_paths.expect("expecting device paths or uuids");
+    let entry_type = db_entry_type(&args);
     let name = args.flag_name.clone();
-    let maybe_keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
-    let yubikey_entry_type = get_yubikey_entry_type(args);
-    CryptOperation::Enroll(EnrollOperation {
-        context,
-        entry_type,
-        new_container,
-        device_paths_or_uuids,
-        iteration_ms,
-        keyfile: maybe_keyfile,
-        backup_context: backup_db_context,
-        name,
-        yubikey_slot: args.flag_slot.clone(),
-        yubikey_entry_type,
-    })
+    let keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
+    let yubikey_entry_type = yubikey_entry_type(args);
+    let yubikey_slot = args.flag_slot.clone();
+
+    operation::enroll::enroll::<C, MainContext>(
+        &ctx,
+        operation::enroll::Params {
+            entry_type,
+            new_container,
+            device_paths_or_uuids,
+            iteration_ms,
+            keyfile,
+            backup_context,
+            name,
+            yubikey_slot,
+            yubikey_entry_type,
+        },
+    )
 }
 
-fn _open_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<String>>) -> CryptOperation {
+fn open<C: Context + DeviceOps>(args: &Args, ctx: &C, maybe_paths: Option<Vec<String>>) -> Result<()> {
     let device_paths_or_uuids = maybe_paths.expect("expecting device paths or uuids");
     let name = args.flag_name.clone();
 
-    CryptOperation::Open(OpenOperation {
-        context,
-        device_paths_or_uuids,
-        name,
-    })
+    operation::open::open(
+        ctx,
+        operation::open::Params {
+            device_paths_or_uuids,
+            name,
+        },
+    )
 }
 
-fn _register_operation(args: &Args, context: MainContext, maybe_paths: Option<Vec<String>>) -> CryptOperation {
+fn register<C: Context>(args: &Args, ctx: &C, maybe_paths: Option<Vec<String>>) -> Result<()> {
     let device_paths_or_uuids = maybe_paths.expect("expecting device paths or uuids");
     let name = args.flag_name.clone();
-    let maybe_keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
-    let entry_type = get_entry_type(&args);
+    let keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
+    let entry_type = db_entry_type(&args);
 
-    CryptOperation::Register(RegisterOperation {
-        context,
-        device_paths_or_uuids,
-        name,
-        keyfile: maybe_keyfile,
-        entry_type,
-    })
+    operation::register::register(
+        ctx,
+        operation::register::Params {
+            device_paths_or_uuids,
+            entry_type,
+            keyfile,
+            name,
+        },
+    )
 }
 
-fn get_operation(args: &Args) -> Result<CryptOperation> {
-    let db_type = args.arg_db_type.as_ref().map(|s| match s.as_ref() {
+fn perform_operation(args: &Args) -> Result<()> {
+    let db_type_opt: Option<DbType> = args.arg_db_type.as_ref().map(|s| match s.as_ref() {
         "operation" => DbType::Operation,
         "backup" => DbType::Backup,
-        _ => panic!("Unknown db_type!"),
+        _ => panic!("Unrecognised DB type"),
     });
-    let db_location = get_db_location(args.arg_db.as_ref().map(PathBuf::from), db_type.as_ref())
-        .map_err(|err| CmdError::DatabaseNotAvailable(err))?;
-    let context = MainContext::new(db_location);
+    let db_path = db_path(args)?;
+    let ctx = MainContext::new(db_path);
     let maybe_paths = args.arg_device_or_uuid.clone();
 
     match args {
-        _ if args.cmd_enroll => Ok(_enroll_operation(args, context, maybe_paths)),
-        _ if args.cmd_init => Ok(CryptOperation::NewDatabase(NewDatabaseOperation { context })),
-        _ if args.cmd_list => Ok(CryptOperation::List(ListOperation {
-            context,
-            only_available: !args.flag_all,
-        })),
-        _ if args.cmd_open => Ok(_open_operation(args, context, maybe_paths)),
-        _ if args.cmd_register => Ok(_register_operation(args, context, maybe_paths)),
-        _ => Err(CmdError::UnrecognisedOperation),
+        _ if args.cmd_enroll => enroll(args, &ctx, maybe_paths),
+        _ if args.cmd_init => operation::newdb::newdb(&ctx, operation::newdb::Params(db_type_opt.expect("db type"))),
+        _ if args.cmd_list => operation::list::list(
+            &ctx,
+            operation::list::Params {
+                only_available: !args.flag_all,
+            },
+        ),
+        _ if args.cmd_open => open(args, &ctx, maybe_paths),
+        _ if args.cmd_register => register(args, &ctx, maybe_paths),
+        _ => panic!("BUG: Unknown command!"),
     }
 }
 
 fn run_peroxs() -> i32 {
     env_logger::init();
-    // this enables verbose logging in the cryptsetup lib
-    // TODO: remove this or move to feature flag
-    MainContext::trace_on();
+    if log_enabled!(Level::Debug) {
+        // enable cryptsetup tracing
+        MainContext::trace_on();
+    }
 
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.argv(env::args().into_iter()).deserialize())
         .unwrap_or_else(|e| e.exit());
 
-    let operation = get_operation(&args);
-
     if args.flag_version {
         println!("peroxs {}", VERSION);
         0
-    } else if let Ok(op) = operation {
-        if let Err(error) = op.perform() {
-            println!("ERROR: {}", error);
-            -1
-        } else {
-            0
-        }
-    } else if let Err(cmd_error) = operation {
-        println!("{}", cmd_error);
-        -2
     } else {
-        0
+        match perform_operation(&args) {
+            Ok(_) => 0,
+            Err(e) => {
+                println!("ERROR: {}", e);
+                1
+            }
+        }
     }
 }
 

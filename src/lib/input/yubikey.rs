@@ -1,99 +1,76 @@
+use std::convert::From;
+
 use uuid::Uuid;
 use ykpers_rs::{
-    ChallengeResponse, ChallengeResponseParams, SHA1_BLOCK_LENGTH, SHA1_RESPONSE_LENGTH, Yubikey, YubikeyDevice,
+    ChallengeResponse, ChallengeResponseParams, Error as YubikeyError, Yubikey, YubikeyDevice, SHA1_BLOCK_LENGTH,
+    SHA1_RESPONSE_LENGTH,
 };
 
-use context::{Error, MainContext, PasswordInput, Result, YubikeyInput};
-use io::yubikey;
-use io::KeyWrapper;
-use model::{YubikeyEntryType, YubikeySlot};
+use db::{YubikeyEntryType, YubikeySlot};
+use input::{Error, KeyInput, Result, SecStr};
 
-pub trait AcquireYubikey
-where
-    Self::Device: Yubikey + ChallengeResponse + Sized,
-{
-    type Device;
-
-    fn acquire_device() -> Result<Self::Device>;
+/// Parameters for Yubikey input
+pub struct YubikeyPrompt {
+    /// Entry type (vanilla challenge-response or hybrid)
+    pub entry_type: YubikeyEntryType,
+    /// Key input mechanism for the challenge passphrase (and 'other' passphrase if hybrid)
+    pub passphrase_input: Box<dyn KeyInput>,
+    /// Slot of Yubikey
+    pub slot: YubikeySlot,
+    /// UUID of the key entry (used as a salt for hybrid)
+    pub uuid: Uuid,
 }
 
-impl AcquireYubikey for MainContext {
-    type Device = YubikeyDevice;
-    fn acquire_device() -> Result<Self::Device> {
-        YubikeyDevice::new().map_err(|err| Error::YubikeyError {
-            message: format!("Failed to get Yubikey device: {:?}", err),
-        })
-    }
-}
-
-impl<T> YubikeyInput for T
-where
-    T: PasswordInput + AcquireYubikey,
-{
-    fn read_yubikey(
-        &self,
-        name: Option<&str>,
-        uuid: &Uuid,
-        slot: YubikeySlot,
-        entry_type: YubikeyEntryType,
-    ) -> Result<KeyWrapper> {
-        let mut dev = try!(Self::acquire_device());
-        let challenge = try!(self.read_password(&challenge_prompt(name)));
-        match entry_type {
-            YubikeyEntryType::ChallengeResponse => {
-                read_challenge_response(&mut dev, slot, challenge.as_slice()).map(|k| yubikey::wrap(&k))
-            }
+impl KeyInput for YubikeyPrompt {
+    fn get_key(&self, prompt: &str) -> Result<SecStr> {
+        let mut dev = get_yubikey_device()?;
+        // TODO - verify the prompt looks OK
+        let chal_key = self.passphrase_input.get_key(&format!("Challenge for {}", prompt))?;
+        match self.entry_type {
+            YubikeyEntryType::ChallengeResponse => read_challenge_response(&mut dev, self.slot, &chal_key),
             YubikeyEntryType::HybridChallengeResponse => {
-                let other_passphrase = try!(self.read_password("Please enter the other passphrase: "));
-                read_hybrid_challenge_response(&mut dev, slot, challenge.as_slice(), other_passphrase.as_slice(), uuid)
+                let other_key = self.passphrase_input.get_key("Please enter the other passphrase: ")?;
+                read_hybrid_challenge_response(&mut dev, self.slot, &chal_key, &other_key, &self.uuid)
             }
         }
     }
 }
 
-fn challenge_prompt(maybe_name: Option<&str>) -> String {
-    if let Some(name) = maybe_name {
-        format!("Please enter challenge passphrase for {}: ", name)
-    } else {
-        format!("Please enter new challenge passphrase: ")
+impl From<YubikeyError> for Error {
+    fn from(e: YubikeyError) -> Self {
+        Error::YubikeyError(e)
     }
+}
+
+fn get_yubikey_device() -> Result<YubikeyDevice> {
+    let dev = YubikeyDevice::new()?;
+    Ok(dev)
 }
 
 fn read_challenge_response<Dev: ChallengeResponse>(
     dev: &mut Dev,
     slot: YubikeySlot,
-    challenge: &[u8],
-) -> Result<[u8; SHA1_RESPONSE_LENGTH]> {
-    let params = ChallengeResponseParams {
-        slot: slot,
-        is_hmac: true,
-    };
+    challenge: &SecStr,
+) -> Result<SecStr> {
+    let params = ChallengeResponseParams { slot, is_hmac: true };
     println!("Please interact with the Yubikey now...");
     let mut response = [0u8; SHA1_BLOCK_LENGTH];
-    dev.challenge_response(params, &challenge, &mut response)
-        .map(|_| {
-            // FIXME: wait until copy_memory or similar is stable
-            let mut fix_response = [0u8; SHA1_RESPONSE_LENGTH];
-            {
-                for (i, b) in response.iter().take(SHA1_RESPONSE_LENGTH).enumerate() {
-                    fix_response[i] = *b;
-                }
-            }
-            fix_response
-        })
-        .map_err(|err| Error::YubikeyError {
-            message: format!("Failed Yubikey challenge-response: {:?}", err),
-        })
+    dev.challenge_response(params, challenge.unsecure(), &mut response)?;
+    let key = SecStr::new(response[0..SHA1_RESPONSE_LENGTH].to_vec());
+    for b in response.iter_mut() {
+        *b = 0u8;
+    }
+    Ok(key)
 }
 
 #[cfg(not(feature = "yubikey_hybrid"))]
 fn read_hybrid_challenge_response<Dev>(
     dev: &mut Dev,
     slot: YubikeySlot,
-    challenge: &[u8],
-    other_passphrase: &[u8],
+    challenge: &SecStr,
+    other_passphrase: &SecStr,
     uuid: &Uuid,
-) -> Result<KeyWrapper> {
+) -> Result<SecStr> {
     Err(Error::FeatureNotAvailable)
 }
 
@@ -104,7 +81,7 @@ pub mod tests {
     use expectest::prelude::*;
     use ykpers_rs::{ChallengeResponse, ChallengeResponseParams, Result, SHA1_BLOCK_LENGTH};
 
-    use model::YubikeySlot;
+    use db::YubikeySlot;
 
     pub struct MockChallengeResponse<'a> {
         responses: HashMap<(YubikeySlot, &'a [u8]), Result<&'a [u8; SHA1_BLOCK_LENGTH]>>,
@@ -122,6 +99,7 @@ pub mod tests {
                 .get(&(params.slot, challenge))
                 .unwrap_or_else(|| panic!("Nothing found for slot: {:?}, challenge {:?}", params.slot, challenge))
                 .map(|got_bytes| {
+                    // FIXME FIXME FIXME
                     // oh my, clone_from() is only implemented for arrays up to size 32
                     for (i, b) in got_bytes.iter().enumerate() {
                         response[i] = *b;
@@ -164,13 +142,14 @@ mod hybrid {
     use sodiumoxide::crypto::hash::sha256;
     use sodiumoxide::crypto::pwhash::scryptsalsa208sha256;
     use uuid::Uuid;
-    use ykpers_rs::{ChallengeResponse, SHA1_BLOCK_LENGTH, SHA1_RESPONSE_LENGTH};
+    use ykpers_rs::{ChallengeResponse, SHA1_BLOCK_LENGTH};
 
     use super::read_challenge_response;
-    use context::{Error, Result};
-    use io::yubikey;
-    use io::KeyWrapper;
-    use model::YubikeySlot;
+    use db::YubikeySlot;
+
+    use input::{Error, Result};
+
+    use super::SecStr;
 
     // taken from crypto_pwhash_scrypt208sha256
     const PWHASH_OPSLIMIT: usize = 33554432;
@@ -181,45 +160,45 @@ mod hybrid {
         scryptsalsa208sha256::Salt(bytes)
     }
 
-    fn derive_challenge_key(challenge: &[u8], uuid: &Uuid) -> Result<[u8; SHA1_BLOCK_LENGTH]> {
-        let mut derived_key = [0u8; SHA1_BLOCK_LENGTH];
+    fn derive_challenge_key(challenge: &SecStr, uuid: &Uuid) -> Result<SecStr> {
+        let mut derived_key = vec![0u8; SHA1_BLOCK_LENGTH];
         let salt = salt_from_uuid(uuid);
-        scryptsalsa208sha256::derive_key(
+        let _ = scryptsalsa208sha256::derive_key(
             &mut derived_key,
-            challenge,
+            challenge.unsecure(),
             &salt,
             scryptsalsa208sha256::OpsLimit(PWHASH_OPSLIMIT),
             scryptsalsa208sha256::MemLimit(PWHASH_MEMLIMIT),
-        ).map_err(|_| Error::UnknownCryptoError)
-            .map(|_| ())?;
-        Ok(derived_key)
+        ).map_err(|_| Error::UnknownCryptoError)?;
+        Ok(SecStr::new(derived_key))
     }
 
     fn hash_challenge_and_then_response<Dev: ChallengeResponse>(
         dev: &mut Dev,
         slot: YubikeySlot,
-        challenge: &[u8],
+        chal: &SecStr,
         uuid: &Uuid,
-    ) -> Result<[u8; SHA1_RESPONSE_LENGTH]> {
-        let derived_key = try!(derive_challenge_key(challenge, uuid));
-        read_challenge_response(dev, slot, &derived_key)
+    ) -> Result<SecStr> {
+        let derived_key = derive_challenge_key(chal, uuid)?;
+        let resp = read_challenge_response(dev, slot, &derived_key)?;
+        Ok(resp)
     }
 
     pub fn read_hybrid_challenge_response<Dev: ChallengeResponse>(
         dev: &mut Dev,
         slot: YubikeySlot,
-        challenge: &[u8],
-        other_passphrase: &[u8],
+        chal: &SecStr,
+        other_passphrase: &SecStr,
         uuid: &Uuid,
-    ) -> Result<KeyWrapper> {
+    ) -> Result<SecStr> {
         // TODO: explain in more detail the reasoning behind home-brewed crypto...
         sodiumoxide::init().expect("libsodium to be initialised");
 
-        let response = try!(hash_challenge_and_then_response(dev, slot, challenge, uuid));
-        let sha256::Digest(response_hash) = sha256::hash(&response);
+        let response = hash_challenge_and_then_response(dev, slot, chal, uuid)?;
+        let sha256::Digest(response_hash) = sha256::hash(&response.unsecure());
         let auth_key = hmacsha512::Key(response_hash);
-        let hmacsha512::Tag(final_key) = hmacsha512::authenticate(other_passphrase, &auth_key);
-        Ok(yubikey::wrap(&final_key))
+        let hmacsha512::Tag(final_key) = hmacsha512::authenticate(other_passphrase.unsecure(), &auth_key);
+        Ok(SecStr::new(final_key.to_vec()))
     }
 
     #[cfg(test)]
@@ -227,8 +206,9 @@ mod hybrid {
         use expectest::prelude::*;
         use uuid::Uuid;
 
+        use super::super::tests::MockChallengeResponse;
         use super::read_hybrid_challenge_response;
-        use yubikey::tests::MockChallengeResponse;
+        use secstr::SecStr;
 
         #[test]
         fn test_hybrid_key_derivation() {
@@ -249,18 +229,24 @@ mod hybrid {
             ];
 
             let mut yubikey = MockChallengeResponse::new(2, &yubi_challenge[..], &yubi_response);
-            let result = read_hybrid_challenge_response(&mut yubikey, 2, challenge, other, &uuid);
+            let result = read_hybrid_challenge_response(
+                &mut yubikey,
+                2,
+                &SecStr::new(challenge.to_vec()),
+                &SecStr::new(other.to_vec()),
+                &uuid,
+            );
 
             let expected_key = [
                 226, 239, 138, 225, 242, 69, 238, 111, 116, 184, 69, 119, 126, 11, 228, 13, 14, 64, 93, 208, 190, 68,
                 3, 59, 37, 233, 10, 210, 4, 168, 51, 21, 88, 30, 22, 86, 74, 0, 55, 52, 36, 166, 75, 14, 156, 162, 47,
                 140, 242, 163, 58, 211, 34, 12, 250, 23, 152, 94, 172, 124, 66, 58, 76, 249,
             ];
-            expect!(result.as_ref().map(|k| k.as_slice())).to(be_ok().value(&expected_key[..]));
+            expect!(result.as_ref().map(|k| k.unsecure())).to(be_ok().value(&expected_key[..]));
         }
     }
 
 }
 
 #[cfg(feature = "yubikey_hybrid")]
-use yubikey::hybrid::read_hybrid_challenge_response;
+use self::hybrid::read_hybrid_challenge_response;
