@@ -8,24 +8,23 @@ name = "peroxide-cryptsetup"
 readme = "README.md"
 repository = "https://github.com/solidninja/peroxide-cryptsetup"
 version = "0.2.0"
-
 [[bin]]
 doc = false
 name = "peroxs"
 test = false
 
 [dependencies]
-cryptsetup-rs = "0.2"
-docopt = "1.0.0"
-env_logger = "0.5.10"
-errno = "0.2.3"
-libc = "0.2.42"
-log = "0.4.2"
+cryptsetup-rs = "0.2.0"
+docopt = "1.0.1"
+env_logger = "0.5.13"
+errno = "0.2.4"
+libc = "0.2.43"
+log = "0.4.4"
 prettytable-rs = "0.7.0"
 secstr = "0.3.0"
-serde = "1.0.66"
-serde_derive = "1.0.66"
-serde_json = "1.0.20"
+serde = "1.0.75"
+serde_derive = "1.0.75"
+serde_json = "1.0.26"
 
 [dependencies.sodiumoxide]
 optional = true
@@ -45,10 +44,9 @@ path = "lib/ykpers-rs"
 version = "0.1.0"
 
 [dev-dependencies]
-env_logger = "0.5.10"
 expectest = "0.10.0"
 tempdir = "0.3.7"
-tempfile = "3.0.2"
+tempfile = "3.0.3"
 
 [features]
 default = ["yubikey", "yubikey_hybrid"]
