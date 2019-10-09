@@ -4,7 +4,7 @@ version = "0.1.1"
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
 description = "FFI bindings to libykpers"
 license = "LGPL-3.0"
-homepage = "https://github.com/solidninja/peroxide-cryptsetup"
+homepage = "https://gitlab.com/solidninja/peroxide-cryptsetup"
 edition = "2018"
 
 links = "ykpers-1"

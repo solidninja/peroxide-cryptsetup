@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/solidninja/peroxide-cryptsetup.png?branch=master)](https://travis-ci.org/solidninja/peroxide-cryptsetup)
+[![pipeline status](https://gitlab.com/solidninja/peroxide-cryptsetup/badges/staging/pipeline.svg)](https://gitlab.com/solidninja/peroxide-cryptsetup/commits/staging)
 [![crates.io Status](https://img.shields.io/crates/v/peroxide-cryptsetup.svg)](https://crates.io/crates/peroxide-cryptsetup)
 
 _**peroxide-cryptsetup**_

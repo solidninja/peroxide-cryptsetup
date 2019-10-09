@@ -4,7 +4,7 @@ version = "0.1.1"
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
 license = "LGPL-3.0"
 description = "Tiny library to read passwords from terminal windows"
-homepage = "https://github.com/solidninja/peroxide-cryptsetup"
+homepage = "https://gitlab.com/solidninja/peroxide-cryptsetup"
 edition = "2018"
 
 [dependencies]
