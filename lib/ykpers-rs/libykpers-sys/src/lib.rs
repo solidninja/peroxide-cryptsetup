@@ -3,7 +3,7 @@
 
 extern crate libc;
 
-use libc::{c_uchar, c_ushort, size_t, c_char, c_int, c_uint, c_void};
+use libc::{c_char, c_int, c_uchar, c_uint, c_ushort, c_void, size_t};
 
 // FIXME: do we need repr(packed) here becasue ykdef.h defined #pragma pack(push, 1)?
 // ykdef.h
@@ -214,15 +214,21 @@ pub enum EXTFLAG {
     LED_INV = 0x80,
 }
 
-pub const TKTFLAG_UPDATE_MASK: i32 = TKTFLAG_YK1::TAB_FIRST as i32 | TKTFLAG_YK1::APPEND_TAB1 as i32 | TKTFLAG_YK1::APPEND_TAB2 as i32 |
-                                     TKTFLAG_YK1::APPEND_DELAY1 as i32 |
-                                     TKTFLAG_YK1::APPEND_DELAY2 as i32 | TKTFLAG_YK1::APPEND_CR as i32;
+pub const TKTFLAG_UPDATE_MASK: i32 = TKTFLAG_YK1::TAB_FIRST as i32
+    | TKTFLAG_YK1::APPEND_TAB1 as i32
+    | TKTFLAG_YK1::APPEND_TAB2 as i32
+    | TKTFLAG_YK1::APPEND_DELAY1 as i32
+    | TKTFLAG_YK1::APPEND_DELAY2 as i32
+    | TKTFLAG_YK1::APPEND_CR as i32;
 pub const CFGFLAG_UPDATE_MASK: i32 = CFGFLAG_YK1::PACING_10MS as i32 | CFGFLAG_YK1::PACING_20MS as i32;
-pub const EXTFLAG_UPDATE_MASK: i32 = EXTFLAG::SERIAL_BTN_VISIBLE as i32 | EXTFLAG::SERIAL_USB_VISIBLE as i32 |
-                                     EXTFLAG::SERIAL_API_VISIBLE as i32 |
-                                     EXTFLAG::USE_NUMERIC_KEYPAD as i32 | EXTFLAG::FAST_TRIG as i32 |
-                                     EXTFLAG::ALLOW_UPDATE as i32 |
-                                     EXTFLAG::DORMANT as i32 | EXTFLAG::LED_INV as i32;
+pub const EXTFLAG_UPDATE_MASK: i32 = EXTFLAG::SERIAL_BTN_VISIBLE as i32
+    | EXTFLAG::SERIAL_USB_VISIBLE as i32
+    | EXTFLAG::SERIAL_API_VISIBLE as i32
+    | EXTFLAG::USE_NUMERIC_KEYPAD as i32
+    | EXTFLAG::FAST_TRIG as i32
+    | EXTFLAG::ALLOW_UPDATE as i32
+    | EXTFLAG::DORMANT as i32
+    | EXTFLAG::LED_INV as i32;
 
 pub const NDEF_DATA_SIZE: usize = 54;
 
@@ -333,21 +339,23 @@ pub struct yk_prf_method {
 }
 
 extern "C" {
-    pub fn yk_hmac_sha1(key: *const c_char,
-                        key_len: size_t,
-                        text: *const c_char,
-                        text_len: size_t,
-                        output: *mut u8,
-                        output_size: size_t)
-                        -> c_int;
-    pub fn yk_pbkdf2(passphrase: *const c_char,
-                     salt: *const c_uchar,
-                     salt_len: size_t,
-                     iterations: c_uint,
-                     dk: *mut c_uchar,
-                     dklen: size_t,
-                     prf_method: *mut yk_prf_method)
-                     -> c_int;
+    pub fn yk_hmac_sha1(
+        key: *const c_char,
+        key_len: size_t,
+        text: *const c_char,
+        text_len: size_t,
+        output: *mut u8,
+        output_size: size_t,
+    ) -> c_int;
+    pub fn yk_pbkdf2(
+        passphrase: *const c_char,
+        salt: *const c_uchar,
+        salt_len: size_t,
+        iterations: c_uint,
+        dk: *mut c_uchar,
+        dklen: size_t,
+        prf_method: *mut yk_prf_method,
+    ) -> c_int;
 }
 
 // ykstatus.h
@@ -365,15 +373,15 @@ extern "C" {
 }
 
 // ykcore.h
-pub enum yk_key_st { }
-pub enum yk_status_st { }
-pub enum yk_ticket_st { }
-pub enum yk_config_st { }
-pub enum yk_nav_st { }
-pub enum yk_frame_st { }
+pub enum yk_key_st {}
+pub enum yk_status_st {}
+pub enum yk_ticket_st {}
+pub enum yk_config_st {}
+pub enum yk_nav_st {}
+pub enum yk_frame_st {}
 // FIXME did we pick the right ndef_st here?
 // pub enum ndef_st { }
-pub enum yk_device_config_st { }
+pub enum yk_device_config_st {}
 
 extern "C" {
     pub fn yk_init() -> c_int;
@@ -386,22 +394,24 @@ extern "C" {
     pub fn yk_check_firmware_version(k: *mut yk_key_st) -> c_int;
     pub fn yk_check_firmware_version2(status: *mut yk_status_st) -> c_int;
     pub fn yk_get_serial(yk: *mut yk_key_st, slot: u8, flags: c_uint, serial: *mut c_uint) -> c_int;
-    pub fn yk_wait_for_key_status(yk: *mut yk_key_st,
-                                  slot: u8,
-                                  flags: c_uint,
-                                  max_time_ms: c_uint,
-                                  logic_and: bool,
-                                  mask: c_uchar,
-                                  last_data: *mut c_uchar)
-                                  -> c_int;
-    pub fn yk_read_response_from_key(yk: *mut yk_key_st,
-                                     slot: u8,
-                                     flags: c_uint,
-                                     buf: *mut c_void,
-                                     bufsize: c_uint,
-                                     expect_bytes: c_uint,
-                                     bytes_read: *mut c_uint)
-                                     -> c_int;
+    pub fn yk_wait_for_key_status(
+        yk: *mut yk_key_st,
+        slot: u8,
+        flags: c_uint,
+        max_time_ms: c_uint,
+        logic_and: bool,
+        mask: c_uchar,
+        last_data: *mut c_uchar,
+    ) -> c_int;
+    pub fn yk_read_response_from_key(
+        yk: *mut yk_key_st,
+        slot: u8,
+        flags: c_uint,
+        buf: *mut c_void,
+        bufsize: c_uint,
+        expect_bytes: c_uint,
+        bytes_read: *mut c_uint,
+    ) -> c_int;
 
     pub fn yk_write_command(k: *mut yk_key_st, cfg: *mut yk_config_st, command: u8, acc_code: *mut c_uchar) -> c_int;
     pub fn yk_write_config(k: *mut yk_key_st, cfg: *mut yk_config_st, confnum: c_int, acc_code: *mut c_uchar) -> c_int;
@@ -410,18 +420,25 @@ extern "C" {
     pub fn yk_write_device_config(yk: *mut yk_key_st, device_config: *mut yk_device_config_st) -> c_int;
     pub fn yk_write_scan_map(yk: *mut yk_key_st, scan_map: *mut c_uchar) -> c_int;
     pub fn yk_write_to_key(yk: *mut yk_key_st, slot: u8, buf: *const c_void, bufcount: c_int) -> c_int;
-    pub fn yk_challenge_response(yk: *mut yk_key_st,
-                                 yk_cmd: u8,
-                                 may_block: c_int,
-                                 challenge_len: c_uint,
-                                 challenge: *const c_uchar,
-                                 response_len: c_uint,
-                                 response: *mut c_uchar)
-                                 -> c_int;
+    pub fn yk_challenge_response(
+        yk: *mut yk_key_st,
+        yk_cmd: u8,
+        may_block: c_int,
+        challenge_len: c_uint,
+        challenge: *const c_uchar,
+        response_len: c_uint,
+        response: *mut c_uchar,
+    ) -> c_int;
 
     pub fn yk_force_key_update(yk: *mut yk_key_st) -> c_int;
     pub fn yk_get_key_vid_pid(yk: *mut yk_key_st, vid: *mut c_int, pid: *mut c_int) -> c_int;
-    pub fn yk_get_capabilities(yk: *mut yk_key_st, slot: u8, flags: c_uint, capabilities: *mut c_uchar, len: *mut c_uint) -> c_int;
+    pub fn yk_get_capabilities(
+        yk: *mut yk_key_st,
+        slot: u8,
+        flags: c_uint,
+        capabilities: *mut c_uchar,
+        len: *mut c_uint,
+    ) -> c_int;
 
     pub fn _yk_errno_location() -> *mut c_int;
     pub fn yk_strerror(errno: c_int) -> *const c_char;
