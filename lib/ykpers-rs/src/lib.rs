@@ -1,14 +1,14 @@
-extern crate libykpers_sys;
 extern crate libc;
+extern crate libykpers_sys;
 
-use std::sync::{Once, ONCE_INIT};
-use std::sync::atomic::{AtomicIsize, ATOMIC_ISIZE_INIT, Ordering};
 use std::result;
+use std::sync::atomic::{AtomicIsize, Ordering};
+use std::sync::Once;
 
 use libykpers_sys as ffi;
 
-static FFI_INIT: Once = ONCE_INIT;
-static FFI_INIT_RESULT: AtomicIsize = ATOMIC_ISIZE_INIT;
+static FFI_INIT: Once = Once::new();
+static FFI_INIT_RESULT: AtomicIsize = AtomicIsize::new(-1);
 static MIN_VERSION_CHAL_RESP: Version = (2, 2, 0);
 
 pub type Result<T> = result::Result<T, Error>;
@@ -20,12 +20,8 @@ pub const SHA1_RESPONSE_LENGTH: usize = ffi::SHA1_DIGEST_SIZE;
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum ValidationError {
     InvalidSlot,
-    MinimumVersionNotMet {
-        expected: Version,
-        got: Version,
-    },
+    MinimumVersionNotMet { expected: Version, got: Version },
 }
-
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum Error {
@@ -78,7 +74,6 @@ impl NullPtr {
     }
 }
 
-
 fn yk_init() -> Result<()> {
     FFI_INIT.call_once(|| {
         let res = unsafe { ffi::yk_init() };
@@ -118,16 +113,23 @@ pub trait YubikeyStatus {
 pub trait Yubikey {
     type Status;
 
-    fn new() -> Result<Self> where Self: Sized;
-    fn get_status(&self) -> Result<Self::Status> where Self::Status: YubikeyStatus;
-    fn get_serial(&self) -> Result<u32> where Self::Status: YubikeyStatus;
+    fn new() -> Result<Self>
+    where
+        Self: Sized;
+    fn get_status(&self) -> Result<Self::Status>
+    where
+        Self::Status: YubikeyStatus;
+    fn get_serial(&self) -> Result<u32>
+    where
+        Self::Status: YubikeyStatus;
 }
 
 impl Yubikey for YubikeyDevice {
     type Status = YubikeyDeviceStatus;
 
     fn new() -> Result<YubikeyDevice> {
-        yk_init().and_then(|_| NullPtr::wrap_err(unsafe { ffi::yk_open_first_key() }).map(|key| YubikeyDevice { key: key }))
+        yk_init()
+            .and_then(|_| NullPtr::wrap_err(unsafe { ffi::yk_open_first_key() }).map(|key| YubikeyDevice { key: key }))
     }
 
     fn get_status(&self) -> Result<Self::Status> {
@@ -137,9 +139,7 @@ impl Yubikey for YubikeyDevice {
     }
     fn get_serial(&self) -> Result<u32> {
         let mut serial = 0;
-        Error::from_zero_err(unsafe {
-            ffi::yk_get_serial(self.key, 1, 0, &mut serial)
-        })?;
+        Error::from_zero_err(unsafe { ffi::yk_get_serial(self.key, 1, 0, &mut serial) })?;
         Ok(serial)
     }
 }
@@ -167,22 +167,23 @@ pub struct ChallengeResponseParams {
 }
 
 pub trait ChallengeResponse {
-    fn challenge_response(&mut self,
-                          params: ChallengeResponseParams,
-                          challenge: &[u8],
-                          response: &mut [u8; SHA1_BLOCK_LENGTH])
-                          -> Result<()>;
+    fn challenge_response(
+        &mut self,
+        params: ChallengeResponseParams,
+        challenge: &[u8],
+        response: &mut [u8; SHA1_BLOCK_LENGTH],
+    ) -> Result<()>;
 }
 
 impl ChallengeResponse for YubikeyDevice {
-    fn challenge_response(&mut self,
-                          params: ChallengeResponseParams,
-                          challenge: &[u8],
-                          response: &mut [u8; SHA1_BLOCK_LENGTH])
-                          -> Result<()> {
-
+    fn challenge_response(
+        &mut self,
+        params: ChallengeResponseParams,
+        challenge: &[u8],
+        response: &mut [u8; SHA1_BLOCK_LENGTH],
+    ) -> Result<()> {
         // check version of yubikey
-        let status = try!(self.get_status());
+        let status = self.get_status()?;
         let version_triple = status.get_version_triple();
         if version_triple < MIN_VERSION_CHAL_RESP {
             return Err(Error::Validation(ValidationError::MinimumVersionNotMet {
@@ -210,13 +211,15 @@ impl ChallengeResponse for YubikeyDevice {
             _ => return Err(Error::Validation(ValidationError::InvalidSlot)),
         };
         let res = unsafe {
-            ffi::yk_challenge_response(self.key,
-                                       yk_cmd as u8,
-                                       may_block,
-                                       challenge.len() as u32,
-                                       challenge.as_ptr(),
-                                       response.len() as u32,
-                                       response.as_mut_ptr())
+            ffi::yk_challenge_response(
+                self.key,
+                yk_cmd as u8,
+                may_block,
+                challenge.len() as u32,
+                challenge.as_ptr(),
+                response.len() as u32,
+                response.as_mut_ptr(),
+            )
         };
 
         Error::from_zero_err(res as i32)
