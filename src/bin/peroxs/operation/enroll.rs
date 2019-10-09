@@ -52,7 +52,8 @@ pub fn enroll<C: Context + DeviceOps, BC: Context + DeviceOps>(ctx: &C, params: 
                 ))),
                 None => make_entry(path, &params),
             }
-        }).collect::<Result<Vec<_>>>()?;
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     // check dups
     {
@@ -175,7 +176,8 @@ fn format_containers<C: Context + DeviceOps>(
                 &key,
             )?;
             Ok(entry)
-        }).collect::<Result<Vec<_>>>()
+        })
+        .collect::<Result<Vec<_>>>()
 }
 
 fn enroll_with_backup_context<C: Context + DeviceOps, BC: Context + DeviceOps>(
@@ -226,7 +228,8 @@ fn enroll_with_backup_context<C: Context + DeviceOps, BC: Context + DeviceOps>(
                 let (entry, path) = entry_path;
                 let _ = path.luks_add_key(iteration_ms, &new_key, &backup_key)?;
                 Ok(entry)
-            }).collect::<Result<Vec<_>>>()
+            })
+            .collect::<Result<Vec<_>>>()
     } else {
         // not found a backup entry, prompt as usual
         enroll_all(ctx, iteration_ms, devices)
@@ -269,7 +272,8 @@ fn enroll_all<C: Context + DeviceOps>(
             let (entry, path) = entry_path;
             let _ = path.luks_add_key(iteration_ms, &new_key, &prev_key)?;
             Ok(entry)
-        }).collect::<Result<Vec<_>>>()
+        })
+        .collect::<Result<Vec<_>>>()
 }
 
 // TODO test for behavior where keyfile is no inside the directory of the db

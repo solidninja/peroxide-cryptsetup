@@ -132,7 +132,6 @@ pub mod tests {
             .unwrap();
         expect!(&got_response[..]).to(be_equal_to(&response[..]));
     }
-
 }
 
 #[cfg(feature = "yubikey_hybrid")]
@@ -169,7 +168,8 @@ mod hybrid {
             &salt,
             scryptsalsa208sha256::OpsLimit(PWHASH_OPSLIMIT),
             scryptsalsa208sha256::MemLimit(PWHASH_MEMLIMIT),
-        ).map_err(|_| Error::UnknownCryptoError)?;
+        )
+        .map_err(|_| Error::UnknownCryptoError)?;
         Ok(SecStr::new(derived_key))
     }
 
@@ -245,7 +245,6 @@ mod hybrid {
             expect!(result.as_ref().map(|k| k.unsecure())).to(be_ok().value(&expected_key[..]));
         }
     }
-
 }
 
 #[cfg(feature = "yubikey_hybrid")]

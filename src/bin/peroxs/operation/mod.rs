@@ -34,13 +34,11 @@ impl fmt::Display for OperationError {
                 },
                 ContextError::DeviceAlreadyActivated(ref expl) => write!(fmt, "Device is already activated: {}", expl),
                 ContextError::DeviceError(ref de) => match de {
-                    DeviceError::CryptsetupError(ref errno) =>
-                        match errno {
-                            Errno(1) => write!(fmt, "Wrong key for disk or permission denied"),
-                            Errno(22) => write!(fmt, "Permission denied or invalid argument (cryptsetup)"),
-                            _ => write!(fmt, "Cryptsetup failed with error: {}", errno),
-                        }
-                    ,
+                    DeviceError::CryptsetupError(ref errno) => match errno {
+                        Errno(1) => write!(fmt, "Wrong key for disk or permission denied"),
+                        Errno(22) => write!(fmt, "Permission denied or invalid argument (cryptsetup)"),
+                        _ => write!(fmt, "Cryptsetup failed with error: {}", errno),
+                    },
                     DeviceError::DeviceReadError(ref cause) => write!(fmt, "Unable to read device: {}", cause),
                     DeviceError::IOError(ref cause) => write!(fmt, "Unknown I/O error working on device: {}", cause),
                 },

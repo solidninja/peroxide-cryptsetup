@@ -1,7 +1,6 @@
 #![deny(warnings)]
 #![deny(bare_trait_objects)]
 #[warn(unused_must_use)]
-
 extern crate docopt;
 extern crate env_logger;
 extern crate errno;
@@ -113,7 +112,11 @@ fn db_path(args: &Args) -> Result<PathBuf> {
         .as_ref()
         .map(PathBuf::from)
         .map(Ok) // gwah!
-        .unwrap_or_else(|| PeroxideDb::default_location().map_err(From::from).map_err(From::<peroxide_cryptsetup::context::Error>::from))
+        .unwrap_or_else(|| {
+            PeroxideDb::default_location()
+                .map_err(From::from)
+                .map_err(From::<peroxide_cryptsetup::context::Error>::from)
+        })
 }
 
 fn new_container_parameters(args: &Args) -> Option<operation::enroll::NewContainerParameters> {

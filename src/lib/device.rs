@@ -130,8 +130,10 @@ impl Disks {
                         entry.map(|e| e.path()).and_then(|p| {
                             Disks::parse_uuid_from(&p).ok_or(io::Error::new(ErrorKind::Other, "Uuid parsing failed"))
                         })
-                    }).collect()
-            }).map_err(From::from)
+                    })
+                    .collect()
+            })
+            .map_err(From::from)
     }
 
     /// Convert a UUID into a path under `/dev/disk/by-uuid/` if the disk with that UUID exists
@@ -149,7 +151,8 @@ impl Disks {
                         format!("Disk path {} is not a file", path.display()),
                     ))
                 }
-            }).map_err(From::from)
+            })
+            .map_err(From::from)
     }
 
     /// Test whether a device name is in use already (i.e. it is actively mapped)

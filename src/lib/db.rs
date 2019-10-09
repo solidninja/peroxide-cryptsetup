@@ -212,7 +212,8 @@ pub mod tests {
         expect!(serde_json::to_string(&VolumeId::new(
             Some("foobar".to_string()),
             Uuid::nil()
-        ))).to(be_ok().value(r#"{"name":"foobar","id":{"uuid":"00000000-0000-0000-0000-000000000000"}}"#.to_string()));
+        )))
+        .to(be_ok().value(r#"{"name":"foobar","id":{"uuid":"00000000-0000-0000-0000-000000000000"}}"#.to_string()));
     }
 
     #[test]
@@ -261,5 +262,4 @@ pub mod tests {
         });
         expect!(serde_json::from_str::<PeroxideDb>(db_json)).to(be_ok().value(db.clone()));
     }
-
 }

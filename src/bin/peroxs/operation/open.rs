@@ -26,7 +26,8 @@ pub fn open<C: Context + DeviceOps>(ctx: &C, params: Params) -> Result<()> {
                     path_or
                 ))),
             }
-        }).collect::<Result<Vec<_>>>()?;
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     // check dups
     {

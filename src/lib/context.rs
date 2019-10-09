@@ -143,7 +143,8 @@ impl DeviceOps for MainContext {
             &move |_| prompt.clone(),
             &self.key_input_config,
             &self.db_path.parent().expect("parent path"),
-        ).map_err(From::from)
+        )
+        .map_err(From::from)
     }
 }
 
