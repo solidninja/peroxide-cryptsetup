@@ -109,7 +109,10 @@ fn read_stdin() -> Result<Vec<u8>> {
                 if let Some(b'\n') = buf.pop() {
                     Ok(buf)
                 } else {
-                    Err(Error::new(ErrorKind::UnexpectedEof, "passphrase should contain a newline at end"))
+                    Err(Error::new(
+                        ErrorKind::UnexpectedEof,
+                        "passphrase should contain a newline at end",
+                    ))
                 }
             } else {
                 Err(Error::new(ErrorKind::UnexpectedEof, "passphrase cannot be empty"))
