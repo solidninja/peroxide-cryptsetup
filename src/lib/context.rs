@@ -8,9 +8,9 @@ pub use cryptsetup_rs::Luks1CryptDeviceHandle as CryptDevice;
 
 use secstr::SecStr;
 
-use db::{DbEntry, Error as DbError, PeroxideDb, VolumeId};
-use device::{Disks, Error as DeviceError, LuksVolumeOps};
-use input::{get_key_for, Error as InputError, KeyInputConfig};
+use crate::db::{DbEntry, Error as DbError, PeroxideDb, VolumeId};
+use crate::device::{Disks, Error as DeviceError, LuksVolumeOps};
+use crate::input::{get_key_for, Error as InputError, KeyInputConfig};
 
 pub type Result<T> = result::Result<T, Error>;
 

@@ -2,7 +2,7 @@ use peroxide_cryptsetup::context::{Context, PeroxideDbOps};
 use peroxide_cryptsetup::db::{DbEntry, YubikeyEntryType};
 use prettytable::{format, Table};
 
-use operation::{path_or_uuid_to_path, Result};
+use crate::operation::{path_or_uuid_to_path, Result};
 
 #[derive(Debug)]
 pub struct Params {

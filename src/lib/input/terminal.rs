@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use input::{KeyInput, Result, SecStr};
+use crate::input::{KeyInput, Result, SecStr};
 use ttypass;
 
 /// A terminal prompt for a key (password)

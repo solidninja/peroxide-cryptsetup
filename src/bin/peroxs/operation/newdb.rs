@@ -1,6 +1,7 @@
-use operation::{OperationError, Result};
 use peroxide_cryptsetup::context::{Context, PeroxideDbOps};
 use peroxide_cryptsetup::db::{DbType, PeroxideDb};
+
+use crate::operation::{OperationError, Result};
 
 /// Parameters to the `newdb` command (namely just a database type)
 pub struct Params(pub DbType);

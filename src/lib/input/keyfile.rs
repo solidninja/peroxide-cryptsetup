@@ -3,7 +3,7 @@ use std::io;
 use std::io::Read;
 use std::path::PathBuf;
 
-use input::{KeyInput, Result, SecStr};
+use crate::input::{KeyInput, Result, SecStr};
 
 /// Parameters for key file input
 pub struct KeyfilePrompt {
@@ -38,10 +38,10 @@ mod tests {
     use std::io::Write;
     use std::str;
 
-    use tempdir::TempDir;
+    use tempfile::{Builder, TempDir};
 
     fn _write_keyfile(s: &str) -> Result<(TempDir, PathBuf)> {
-        let tmp_dir = TempDir::new("keyfile_prompt")?;
+        let tmp_dir = Builder::new().prefix("keyfile_prompt").tempdir()?;
         let keyfile = tmp_dir.path().join("keyfile");
 
         let mut tmp_file = File::create(&keyfile)?;

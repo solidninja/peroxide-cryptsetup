@@ -31,9 +31,6 @@ extern crate expectest;
 #[cfg(test)]
 extern crate tempfile;
 
-#[cfg(test)]
-extern crate tempdir;
-
 pub mod context;
 pub mod db;
 pub mod device;

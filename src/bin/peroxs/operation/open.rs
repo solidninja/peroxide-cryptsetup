@@ -1,7 +1,7 @@
 use peroxide_cryptsetup::context::{Context, DatabaseOps, DeviceOps, PeroxideDbOps};
 use peroxide_cryptsetup::db::VolumeId;
 
-use operation::{path_or_uuid_to_path, OperationError as Error, Result};
+use crate::operation::{path_or_uuid_to_path, OperationError as Error, Result};
 
 #[derive(Debug)]
 pub struct Params {

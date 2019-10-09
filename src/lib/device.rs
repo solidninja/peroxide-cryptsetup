@@ -136,7 +136,7 @@ impl Disks {
 
     /// Convert a UUID into a path under `/dev/disk/by-uuid/` if the disk with that UUID exists
     pub fn disk_uuid_path(uuid: &Uuid) -> Result<PathBuf> {
-        let path = Path::new(DISK_BY_UUID).join(uuid.hyphenated().to_string());
+        let path = Path::new(DISK_BY_UUID).join(uuid.to_hyphenated().to_string());
 
         fs::symlink_metadata(&path)
             .and_then(|meta| {

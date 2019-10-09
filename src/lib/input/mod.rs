@@ -9,7 +9,7 @@ use uuid::Uuid;
 #[cfg(feature = "yubikey")]
 use ykpers_rs::Error as YubikeyError;
 
-use db::{DbEntry, VolumeId, YubikeyEntryType, YubikeySlot};
+use crate::db::{DbEntry, VolumeId, YubikeyEntryType, YubikeySlot};
 
 #[derive(Debug)]
 pub enum Error {

@@ -6,8 +6,8 @@ use ykpers_rs::{
     SHA1_RESPONSE_LENGTH,
 };
 
-use db::{YubikeyEntryType, YubikeySlot};
-use input::{Error, KeyInput, Result, SecStr};
+use crate::db::{YubikeyEntryType, YubikeySlot};
+use crate::input::{Error, KeyInput, Result, SecStr};
 
 /// Parameters for Yubikey input
 pub struct YubikeyPrompt {
@@ -81,7 +81,7 @@ pub mod tests {
     use expectest::prelude::*;
     use ykpers_rs::{ChallengeResponse, ChallengeResponseParams, Result, SHA1_BLOCK_LENGTH};
 
-    use db::YubikeySlot;
+    use crate::db::YubikeySlot;
 
     pub struct MockChallengeResponse<'a> {
         responses: HashMap<(YubikeySlot, &'a [u8]), Result<&'a [u8; SHA1_BLOCK_LENGTH]>>,
@@ -145,9 +145,9 @@ mod hybrid {
     use ykpers_rs::{ChallengeResponse, SHA1_BLOCK_LENGTH};
 
     use super::read_challenge_response;
-    use db::YubikeySlot;
+    use crate::db::YubikeySlot;
 
-    use input::{Error, Result};
+    use crate::input::{Error, Result};
 
     use super::SecStr;
 
