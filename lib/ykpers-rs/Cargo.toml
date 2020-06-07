@@ -11,15 +11,15 @@ edition = "2018"
 name = "ykpers_rs"
 
 [dependencies]
-libc = "0.2.62"
-errno = "0.2.4"
+libc = "0.2.71"
+errno = "0.2.5"
 log = "0.4.8"
 libykpers-sys = { path = "libykpers-sys", version = "0.1.1" }
 
 [dev-dependencies]
-env_logger = "0.7.0"
+env_logger = "0.7.1"
 tempdir = "0.3.7"
-expectest = "0.11.0"
+expectest = "0.12.0"
 
 # [[test]]
 # name = "tests"

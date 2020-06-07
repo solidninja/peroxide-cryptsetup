@@ -41,6 +41,7 @@ impl fmt::Display for OperationError {
                     },
                     DeviceError::DeviceReadError(ref cause) => write!(fmt, "Unable to read device: {}", cause),
                     DeviceError::IOError(ref cause) => write!(fmt, "Unknown I/O error working on device: {}", cause),
+                    DeviceError::Other(ref expl) => write!(fmt, "Other error occurred: {}", expl),
                 },
                 ContextError::FeatureNotAvailable => write!(fmt, "This feature is not available"),
                 ContextError::KeyInputError(ref kie) => match kie {

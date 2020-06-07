@@ -25,7 +25,6 @@ extern crate ykpers_rs;
 extern crate env_logger;
 
 #[cfg(test)]
-#[macro_use(expect)]
 extern crate expectest;
 
 #[cfg(test)]

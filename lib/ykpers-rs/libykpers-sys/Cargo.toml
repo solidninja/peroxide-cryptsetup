@@ -14,7 +14,7 @@ build = "build.rs"
 name = "libykpers_sys"
 
 [dependencies]
-libc = "0.2.62"
+libc = "0.2.71"
 
 [build-dependencies]
-pkg-config = "0.3.16"
+pkg-config = "0.3.17"

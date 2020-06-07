@@ -7,7 +7,7 @@ use std::result;
 
 use cryptsetup_rs;
 pub use cryptsetup_rs::Keyslot;
-use cryptsetup_rs::{CryptDevice, Luks1CryptDevice};
+use cryptsetup_rs::{CryptDevice, LuksCryptDevice};
 
 use errno;
 use secstr::SecStr;
@@ -21,6 +21,8 @@ pub enum Error {
     DeviceReadError(String),
     /// Error that originates from some other kind of IO
     IOError(::std::io::Error),
+    /// Other error (unmatched)
+    Other(String),
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -31,6 +33,7 @@ impl From<cryptsetup_rs::Error> for Error {
             cryptsetup_rs::Error::BlkidError(be) => Error::DeviceReadError(format!("{:?}", be)),
             cryptsetup_rs::Error::CryptsetupError(e) => Error::CryptsetupError(e),
             cryptsetup_rs::Error::IOError(ie) => Error::IOError(ie),
+            other => Error::Other(other.to_string())
         }
     }
 }
@@ -106,7 +109,7 @@ impl<P: AsRef<Path>> LuksVolumeOps for P {
     }
 
     fn uuid(&self) -> Result<Uuid> {
-        cryptsetup_rs::luks1_uuid(self.as_ref()).map_err(From::from)
+        cryptsetup_rs::luks_uuid(self.as_ref()).map_err(From::from)
     }
 }
 
