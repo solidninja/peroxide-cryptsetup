@@ -1,6 +1,7 @@
 #![deny(warnings)]
 #![deny(bare_trait_objects)]
-#[warn(unused_must_use)]
+#![warn(unused_must_use)]
+
 extern crate cryptsetup_rs;
 extern crate errno;
 extern crate secstr;
@@ -11,6 +12,9 @@ extern crate uuid;
 
 #[macro_use]
 extern crate log;
+
+#[cfg(feature = "pinentry")]
+extern crate pinentry_rs;
 
 #[macro_use]
 extern crate serde_derive;

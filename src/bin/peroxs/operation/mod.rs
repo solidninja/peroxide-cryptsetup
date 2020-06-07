@@ -49,7 +49,9 @@ impl fmt::Display for OperationError {
                     InputError::IoError(ref cause) => write!(fmt, "Unknown I/O error during key input: {}", cause),
                     InputError::UnknownCryptoError => write!(fmt, "Unknown error occurred during crypto operation"),
                     #[cfg(feature = "yubikey")]
-                    InputError::YubikeyError(ref cause) => write!(fmt, "Yubikey error: {:?}", cause),
+                    InputError::YubikeyError(ref cause) => write!(fmt, "Yubikey error: {}", cause),
+                    #[cfg(feature = "pinentry")]
+                    InputError::PinentryError(ref cause) => write!(fmt, "Pinentry error: {}", cause)
                 },
                 ContextError::VolumeNotFound(ref volume_id) => write!(fmt, "Could not find volume {}", volume_id),
             },

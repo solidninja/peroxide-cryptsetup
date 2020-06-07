@@ -46,16 +46,21 @@ version = "0.8.1"
 [dependencies.ykpers-rs]
 optional = true
 path = "lib/ykpers-rs"
-version = "0.1.1"
+version = "0.2.0-beta1"
+
+[dependencies.pinentry-rs]
+optional = true
+version = "0.1.2"
 
 [dev-dependencies]
 expectest = "0.12.0"
 tempfile = "3.1.0"
 
 [features]
-default = ["yubikey", "yubikey_hybrid"]
+default = ["pinentry", "yubikey", "yubikey_hybrid"]
 yubikey = ["ykpers-rs"]
 yubikey_hybrid = ["yubikey", "sodiumoxide"]
+pinentry = ["pinentry-rs"]
 
 [lib]
 name = "peroxide_cryptsetup"

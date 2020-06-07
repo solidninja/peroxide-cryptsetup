@@ -2,6 +2,8 @@ use std::io;
 use std::path::Path;
 use std::result;
 use std::time::Duration;
+use std::error;
+use std::fmt::Display;
 
 pub use secstr::SecStr;
 use uuid::Uuid;
@@ -9,7 +11,11 @@ use uuid::Uuid;
 #[cfg(feature = "yubikey")]
 use ykpers_rs::Error as YubikeyError;
 
+#[cfg(feature = "pinentry")]
+use pinentry_rs::Error as PinEntryError;
+
 use crate::db::{DbEntry, VolumeId, YubikeyEntryType, YubikeySlot};
+use serde::export::Formatter;
 
 #[derive(Debug)]
 pub enum Error {
@@ -18,6 +24,8 @@ pub enum Error {
     UnknownCryptoError,
     #[cfg(feature = "yubikey")]
     YubikeyError(YubikeyError),
+    #[cfg(feature = "pinentry")]
+    PinentryError(PinEntryError),
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -25,6 +33,30 @@ pub type Result<T> = result::Result<T, Error>;
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
         Error::IoError(e)
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::FeatureNotAvailable => write!(f, "Feature is not available"),
+            Error::IoError(ref cause) => write!(f, "I/O error: {}", cause),
+            Error::UnknownCryptoError => write!(f, "Unknown crypto error - yikes!"),
+            #[cfg(feature = "yubikey")]
+            Error::YubikeyError(ref cause) => write!(f, "Yubikey error: {:?}", cause), // TODO: formatting
+            #[cfg(feature = "pinentry")]
+            Error::PinentryError(ref cause) => write!(f, "Pinentry error: {:?}", cause), // TODO: formatting
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            Error::IoError(ref cause) => Some(cause),
+            // FIXME
+            _ => None,
+        }
     }
 }
 
@@ -77,8 +109,15 @@ fn get_input_method_for<P: AsRef<Path>>(
 }
 
 /// Create parameters for a passphrase input (a terminal)
+#[cfg(not(feature = "pinentry"))]
 fn passphrase(timeout: Option<Duration>) -> impl KeyInput {
     terminal::TerminalPrompt { timeout }
+}
+
+/// Create parameters for a passphrase input (using pinentry)
+#[cfg(feature = "pinentry")]
+fn passphrase(timeout: Option<Duration>) -> impl KeyInput {
+    pinentry::PinentryPrompt { timeout }
 }
 
 /// Create parameters for a keyfile input (a physical file)
@@ -120,10 +159,11 @@ fn yubikey(
     }
 }
 
-// TODO: feature(pinentry)
-
 mod keyfile;
 mod terminal;
 
 #[cfg(feature = "yubikey")]
 mod yubikey;
+
+#[cfg(feature = "pinentry")]
+mod pinentry;
