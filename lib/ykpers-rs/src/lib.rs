@@ -1,6 +1,8 @@
 extern crate libc;
 extern crate libykpers_sys;
 
+use std::error;
+use std::fmt::{Display, Formatter};
 use std::result;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::Once;
@@ -29,6 +31,24 @@ pub enum Error {
     UsbError,
     YkError(ffi::YK_ERR),
     Unknown(i32),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Validation(ValidationError::InvalidSlot) => write!(f, "Validation error - invalid slot specified"),
+            Error::Validation(ValidationError::MinimumVersionNotMet { expected, got }) => write!(f, "Validation error - expected minimum version {}.{}.{}, got {}.{}.{} instead", expected.0, expected.1, expected.2, got.0, got.1, got.2),
+            Error::UsbError => write!(f, "USB error - unknown"),
+            Error::YkError(ref cause) => write!(f, "Yubikey error code {:?}", cause),
+            Error::Unknown(ref num) => write!(f, "Unknown error code {}", num),
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
+    }
 }
 
 impl Error {
@@ -114,14 +134,14 @@ pub trait Yubikey {
     type Status;
 
     fn new() -> Result<Self>
-    where
-        Self: Sized;
+        where
+            Self: Sized;
     fn get_status(&self) -> Result<Self::Status>
-    where
-        Self::Status: YubikeyStatus;
+        where
+            Self::Status: YubikeyStatus;
     fn get_serial(&self) -> Result<u32>
-    where
-        Self::Status: YubikeyStatus;
+        where
+            Self::Status: YubikeyStatus;
 }
 
 impl Yubikey for YubikeyDevice {
