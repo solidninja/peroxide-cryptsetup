@@ -149,18 +149,34 @@ impl DeviceOps for MainContext {
 }
 
 pub trait DatabaseOps {
+    /// Check if an entry exists by uuid
+    fn entry_exists(&self, uuid: &uuid::Uuid) -> bool;
+
+    /// Find an entry by uuid
+    fn find_entry(&self, uuid: &uuid::Uuid) -> Option<&DbEntry>;
+
+    // TODO: deprecate this?
     /// Given a disk path, find the corresponding db entry
     fn find_entry_for_disk_path<P: AsRef<Path>>(&self, path: P) -> Option<&DbEntry>;
 }
 
 impl DatabaseOps for PeroxideDb {
+    fn entry_exists(&self, uuid: &uuid::Uuid) -> bool {
+        self.find_entry(uuid).is_some()
+    }
+
+    fn find_entry(&self, uuid: &uuid::Uuid) -> Option<&DbEntry> {
+        self.entries.iter().find(|e| e.volume_id().uuid() == uuid)
+    }
+
     fn find_entry_for_disk_path<P: AsRef<Path>>(&self, path: P) -> Option<&DbEntry> {
-        path.uuid()
+        path.luks_uuid()
             .ok()
             .and_then(|disk_uuid| self.entries.iter().find(|e| e.volume_id().uuid() == &disk_uuid))
     }
 }
 
+// FIXME remove this
 pub fn standard_prompt(volume_id: &VolumeId) -> String {
     format!("Please enter key for {}: ", volume_id)
 }

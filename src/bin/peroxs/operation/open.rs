@@ -1,12 +1,13 @@
 use peroxide_cryptsetup::context::{Context, DatabaseOps, DeviceOps, PeroxideDbOps};
 use peroxide_cryptsetup::db::VolumeId;
 
-use crate::operation::{path_or_uuid_to_path, OperationError as Error, Result};
+use crate::operation::{Disks, OperationError as Error, PathOrUuid, Result};
+use peroxide_cryptsetup::device::LuksVolumeOps;
 
 #[derive(Debug)]
 pub struct Params {
     /// List of device paths or UUIDs corresponding to the devices we want to open
-    pub device_paths_or_uuids: Vec<String>,
+    pub device_paths_or_uuids: Vec<PathOrUuid>,
     /// Name override (if a single device is present)
     pub name: Option<String>,
 }
@@ -14,18 +15,31 @@ pub struct Params {
 pub fn open<C: Context + DeviceOps>(ctx: &C, params: Params) -> Result<()> {
     let db = ctx.open_db()?;
 
+    let num_params = params.device_paths_or_uuids.len();
     let entries_with_path = params
         .device_paths_or_uuids
         .iter()
-        .map(|path_or| {
-            let path = path_or_uuid_to_path(&path_or)?;
-            match db.find_entry_for_disk_path(&path) {
-                Some(entry) => Ok((entry, path)),
-                None => Err(Error::NotFoundInDb(format!(
-                    "Path/UUID '{}' not found in database",
-                    path_or
-                ))),
+        .map(|path_or| match path_or {
+            PathOrUuid::Uuid(uuid) => {
+                let path = Disks::disk_uuid_path(&uuid)?;
+                Ok((uuid.clone(), path))
             }
+            PathOrUuid::Path(path) => {
+                let uuid = path.luks_uuid()?;
+                Ok((uuid, path.clone()))
+            }
+        })
+        .map(|res| {
+            res.and_then(|(uuid, path)| {
+                if let Some(entry) = db.find_entry(&uuid) {
+                    Ok((entry, path))
+                } else {
+                    Err(Error::NotFoundInDb(format!(
+                        "No DB entry for UUID: {}, path: {:?}",
+                        uuid, path
+                    )))
+                }
+            })
         })
         .collect::<Result<Vec<_>>>()?;
 
@@ -34,7 +48,7 @@ pub fn open<C: Context + DeviceOps>(ctx: &C, params: Params) -> Result<()> {
         let mut volume_ids: Vec<VolumeId> = entries_with_path.iter().map(|ep| ep.0.volume_id().clone()).collect();
         volume_ids.sort();
         volume_ids.dedup();
-        if params.device_paths_or_uuids.len() > volume_ids.len() {
+        if num_params > volume_ids.len() {
             return Err(Error::ValidationFailed(format!(
                 "Duplicates found in disks specified, please specify a disk only once"
             )));

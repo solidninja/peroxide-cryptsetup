@@ -33,7 +33,7 @@ impl From<cryptsetup_rs::Error> for Error {
             cryptsetup_rs::Error::BlkidError(be) => Error::DeviceReadError(format!("{:?}", be)),
             cryptsetup_rs::Error::CryptsetupError(e) => Error::CryptsetupError(e),
             cryptsetup_rs::Error::IOError(ie) => Error::IOError(ie),
-            other => Error::Other(other.to_string())
+            other => Error::Other(other.to_string()),
         }
     }
 }
@@ -58,7 +58,7 @@ pub trait LuksVolumeOps {
     fn luks_add_key(&self, iteration_ms: usize, new_key: &SecStr, prev_key: &SecStr) -> Result<Keyslot>;
 
     /// Format a new LUKS device with the given key
-    fn luks_format_with_key(
+    fn luks1_format_with_key(
         &self,
         iteration_ms: usize,
         cipher: &str,
@@ -70,7 +70,7 @@ pub trait LuksVolumeOps {
     ) -> Result<Keyslot>;
 
     /// Read the UUID of an existing LUKS1 device
-    fn uuid(&self) -> Result<Uuid>;
+    fn luks_uuid(&self) -> Result<Uuid>;
 }
 
 impl<P: AsRef<Path>> LuksVolumeOps for P {
@@ -87,7 +87,7 @@ impl<P: AsRef<Path>> LuksVolumeOps for P {
             .map_err(From::from)
     }
 
-    fn luks_format_with_key(
+    fn luks1_format_with_key(
         &self,
         iteration_ms: usize,
         cipher: &str,
@@ -108,7 +108,7 @@ impl<P: AsRef<Path>> LuksVolumeOps for P {
         device.add_keyslot(key.unsecure(), None, None).map_err(From::from)
     }
 
-    fn uuid(&self) -> Result<Uuid> {
+    fn luks_uuid(&self) -> Result<Uuid> {
         cryptsetup_rs::luks_uuid(self.as_ref()).map_err(From::from)
     }
 }

@@ -4,12 +4,12 @@ use peroxide_cryptsetup::context::{Context, PeroxideDbOps};
 use peroxide_cryptsetup::db::{DbEntry, DbEntryType, VolumeId};
 use peroxide_cryptsetup::device::LuksVolumeOps;
 
-use crate::operation::{path_or_uuid_to_path, OperationError, Result};
+use crate::operation::{OperationError, PathOrUuid, Result};
 
 #[derive(Debug)]
 pub struct Params {
     /// Device path or UUID (mix) vector
-    pub device_paths_or_uuids: Vec<String>,
+    pub device_paths_or_uuids: Vec<PathOrUuid>,
     /// Entry type to register (keyfile, passphrase, etc.)
     pub entry_type: DbEntryType,
     /// Key file path (optional)
@@ -24,8 +24,7 @@ pub fn register<C: Context>(ctx: &C, params: Params) -> Result<()> {
     let entries = params
         .device_paths_or_uuids
         .iter()
-        .map(|path_or| path_or_uuid_to_path(&path_or))
-        .map(|p_res| p_res.and_then(|p| to_entry(p, &params)))
+        .map(|p| p.to_path().and_then(|p| to_entry(p, &params)))
         .collect::<Result<Vec<_>>>()?;
 
     for entry in entries.into_iter() {
@@ -37,7 +36,7 @@ pub fn register<C: Context>(ctx: &C, params: Params) -> Result<()> {
 }
 
 fn to_entry(disk_path: PathBuf, params: &Params) -> Result<DbEntry> {
-    let uuid = disk_path.uuid()?;
+    let uuid = disk_path.luks_uuid()?;
     let volume_id = VolumeId::new(params.name.clone(), uuid);
 
     match params.entry_type {

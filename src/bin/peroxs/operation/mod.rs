@@ -2,14 +2,15 @@ use std::convert;
 use std::fmt;
 use std::path::PathBuf;
 use std::result;
+use std::str::FromStr;
+
+use errno::Errno;
+use uuid;
 
 use peroxide_cryptsetup::context::Error as ContextError;
 use peroxide_cryptsetup::db::Error as DatabaseError;
 use peroxide_cryptsetup::device::{Disks, Error as DeviceError};
 use peroxide_cryptsetup::input::Error as InputError;
-
-use errno::Errno;
-use uuid;
 
 pub type Result<T> = result::Result<T, OperationError>;
 
@@ -51,7 +52,7 @@ impl fmt::Display for OperationError {
                     #[cfg(feature = "yubikey")]
                     InputError::YubikeyError(ref cause) => write!(fmt, "Yubikey error: {}", cause),
                     #[cfg(feature = "pinentry")]
-                    InputError::PinentryError(ref cause) => write!(fmt, "Pinentry error: {}", cause)
+                    InputError::PinentryError(ref cause) => write!(fmt, "Pinentry error: {}", cause),
                 },
                 ContextError::VolumeNotFound(ref volume_id) => write!(fmt, "Could not find volume {}", volume_id),
             },
@@ -79,12 +80,39 @@ impl convert::From<InputError> for OperationError {
     }
 }
 
-/// Convert a user-input string which may be a device path _or_ a UUID into path
-fn path_or_uuid_to_path(path_or_uuid: &str) -> Result<PathBuf> {
-    if let Some(id) = uuid::Uuid::parse_str(path_or_uuid).ok() {
-        Disks::disk_uuid_path(&id).map_err(From::from)
-    } else {
-        Ok(PathBuf::from(path_or_uuid))
+#[derive(Debug)]
+pub enum PathOrUuid {
+    Path(PathBuf),
+    Uuid(uuid::Uuid),
+}
+
+impl FromStr for PathOrUuid {
+    type Err = OperationError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let uuid_opt = uuid::Uuid::from_str(s).ok();
+        let path_opt = PathBuf::from_str(s).ok();
+
+        if let Some(uuid) = uuid_opt {
+            Ok(PathOrUuid::Uuid(uuid))
+        } else if let Some(path) = path_opt {
+            Ok(PathOrUuid::Path(path))
+        } else {
+            Err(OperationError::ValidationFailed(format!(
+                "'{}' was not a path or uuid",
+                s
+            )))
+        }
+    }
+}
+
+impl PathOrUuid {
+    /// Convert a UUID of a disk to a physical path
+    pub fn to_path(&self) -> Result<PathBuf> {
+        match self {
+            PathOrUuid::Uuid(uuid) => Disks::disk_uuid_path(&uuid).map_err(From::from),
+            PathOrUuid::Path(path) => Ok(path.clone()),
+        }
     }
 }
 

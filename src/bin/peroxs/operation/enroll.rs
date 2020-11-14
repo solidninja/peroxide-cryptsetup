@@ -1,33 +1,41 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use peroxide_cryptsetup::context::{Context, DatabaseOps, DeviceOps, PeroxideDbOps};
 use peroxide_cryptsetup::db::{DbEntry, DbEntryType, VolumeId, YubikeyEntryType, YubikeySlot};
-use peroxide_cryptsetup::device::LuksVolumeOps;
+use peroxide_cryptsetup::device::{Keyslot, LuksVolumeOps};
+use secstr::SecStr;
 use uuid::Uuid;
 
-use crate::operation::{path_or_uuid_to_path, OperationError as Error, Result};
+use crate::operation::{OperationError as Error, PathOrUuid, Result};
+
+#[derive(Debug)]
+pub enum ContainerType {
+    Luks1,
+    Luks2,
+}
 
 #[derive(Debug)]
 pub struct NewContainerParameters {
     pub cipher: String,
     pub hash: String,
     pub key_bits: usize,
+    pub container_type: ContainerType,
 }
 
 #[derive(Debug)]
-pub struct Params<BC: Context + DeviceOps> {
+pub struct Params<BCtx: Context + DeviceOps> {
     /// Entry type to enroll
     pub entry_type: DbEntryType,
     /// Parameters for formatting the disk if it's not already a LUKS container
     pub new_container: Option<NewContainerParameters>,
     /// List of device paths or UUIDs corresponding to the devices we want to enroll
-    pub device_paths_or_uuids: Vec<String>,
+    pub device_paths_or_uuids: Vec<PathOrUuid>,
     /// Number of iterations (in milliseconds)
     pub iteration_ms: usize,
     /// Key file to use
     pub keyfile: Option<PathBuf>,
     /// Backup context (if using a backup database)
-    pub backup_context: Option<BC>,
+    pub backup_context: Option<BCtx>,
     /// Name override (if a single device is present)
     pub name: Option<String>,
     /// Yubikey slot to use (if using the yubikey)
@@ -36,31 +44,38 @@ pub struct Params<BC: Context + DeviceOps> {
     pub yubikey_entry_type: Option<YubikeyEntryType>,
 }
 
-pub fn enroll<C: Context + DeviceOps, BC: Context + DeviceOps>(ctx: &C, params: Params<BC>) -> Result<()> {
+// TODO: the plan for action is the following:
+//      * need to figure out what parameters to add to format both
+//      * remove the backup db idea
+//      * somehow fix the yubikey uuid ordering issue? :))
+
+pub fn enroll<Ctx: Context + DeviceOps, BCtx: Context + DeviceOps>(ctx: &Ctx, params: Params<BCtx>) -> Result<()> {
     let mut db = ctx.open_db()?;
 
-    let candidate_entries: Vec<(DbEntry, PathBuf)> = params
+    let num_params = params.device_paths_or_uuids.len();
+    let candidate_paths = params
         .device_paths_or_uuids
         .iter()
-        .map(|path_or| {
-            let path = path_or_uuid_to_path(&path_or)?;
-            match db.find_entry_for_disk_path(&path) {
-                Some(entry) => Err(Error::ValidationFailed(format!(
-                    "Found existing database entry {:?} for disk {}",
-                    entry,
-                    path.to_string_lossy()
-                ))),
-                None => make_entry(path, &params),
-            }
+        .map(|pou| match pou {
+            PathOrUuid::Uuid(uuid) if db.entry_exists(&uuid) => Err(Error::ValidationFailed(format!(
+                "Found existing database entry for UUID {}",
+                uuid.to_string()
+            ))),
+            _ => pou.to_path(),
         })
         .collect::<Result<Vec<_>>>()?;
 
-    // check dups
+    let candidate_entries = candidate_paths
+        .into_iter()
+        .map(|p| make_entry(p, &params))
+        .collect::<Result<Vec<(DbEntry, PathBuf)>>>()?;
+
+    // check dups in passed arguments
     {
         let mut volume_ids: Vec<VolumeId> = candidate_entries.iter().map(|ep| ep.0.volume_id().clone()).collect();
         volume_ids.sort();
         volume_ids.dedup();
-        if params.device_paths_or_uuids.len() > volume_ids.len() {
+        if num_params > volume_ids.len() {
             return Err(Error::ValidationFailed(format!(
                 "Duplicates found in disks specified, please enroll a disk only once"
             )));
@@ -85,7 +100,7 @@ pub fn enroll<C: Context + DeviceOps, BC: Context + DeviceOps>(ctx: &C, params: 
 }
 
 fn make_entry<BC: Context + DeviceOps>(path: PathBuf, params: &Params<BC>) -> Result<(DbEntry, PathBuf)> {
-    let uuid_opt = path.uuid().ok();
+    let uuid_opt = path.luks_uuid().ok();
 
     // if a uuid could be determined from path, this means disk is already formatted as luks
     if uuid_opt.is_some() && params.new_container.is_some() {
@@ -166,18 +181,44 @@ fn format_containers<C: Context + DeviceOps>(
         .into_iter()
         .map(|entry_path| {
             let (entry, path) = entry_path;
-            let _ = path.luks_format_with_key(
+            let _ = format_container(
+                &path,
+                entry.volume_id().uuid(),
+                new_container,
                 iteration_ms,
                 cipher,
                 cipher_mode,
-                new_container.hash.as_str(),
-                new_container.key_bits,
-                Some(entry.volume_id().uuid()),
                 &key,
             )?;
             Ok(entry)
         })
         .collect::<Result<Vec<_>>>()
+}
+
+/// TODO: iteration_ms does not belong in the main parameter list, and also more LUKS2 params need to be added
+/// TODO: move this logic to
+fn format_container<P: AsRef<Path>>(
+    device_path: &P,
+    uuid: &Uuid,
+    new_container: &NewContainerParameters,
+    iteration_ms: usize,
+    cipher: &str,
+    cipher_mode: &str,
+    key: &SecStr,
+) -> Result<Keyslot> {
+    let keyslot = match new_container.container_type {
+        ContainerType::Luks1 => device_path.luks1_format_with_key(
+            iteration_ms,
+            cipher,
+            cipher_mode,
+            new_container.hash.as_str(),
+            new_container.key_bits,
+            Some(uuid),
+            key,
+        )?,
+        ContainerType::Luks2 => unimplemented!(),
+    };
+    Ok(keyslot)
 }
 
 fn enroll_with_backup_context<C: Context + DeviceOps, BC: Context + DeviceOps>(

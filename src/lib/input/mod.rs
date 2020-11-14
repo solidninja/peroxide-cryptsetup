@@ -1,9 +1,9 @@
+use std::error;
+use std::fmt::Display;
 use std::io;
 use std::path::Path;
 use std::result;
 use std::time::Duration;
-use std::error;
-use std::fmt::Display;
 
 pub use secstr::SecStr;
 use uuid::Uuid;
@@ -54,11 +54,14 @@ impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Error::IoError(ref cause) => Some(cause),
-            // FIXME
+            Error::YubikeyError(ref cause) => Some(cause),
+            Error::PinentryError(ref cause) => Some(cause),
             _ => None,
         }
     }
 }
+
+// FIXME: change the prompt get_key to take in a DbEntry
 
 /// Interface for getting key data (whether from a terminal, a file, etc.)
 pub trait KeyInput {

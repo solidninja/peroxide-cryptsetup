@@ -19,6 +19,7 @@ extern crate serde_derive;
 use std::env;
 use std::path::PathBuf;
 use std::process::exit;
+use std::str::FromStr;
 
 use docopt::Docopt;
 use log::Level;
@@ -27,18 +28,18 @@ use peroxide_cryptsetup::context::{Context, DeviceOps, MainContext};
 use peroxide_cryptsetup::db::{DbEntryType, DbType, PeroxideDb, YubikeyEntryType};
 
 mod operation;
-use operation::Result;
+use operation::{PathOrUuid, Result};
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 static USAGE: &'static str = "
 Usage:
     peroxs enroll keyfile <keyfile> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
-    peroxs enroll keyfile <keyfile> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll keyfile <keyfile> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [--luks-version=<luks-version>] [at <db>]
     peroxs enroll passphrase <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
-    peroxs enroll passphrase new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll passphrase new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>]  [--luks-version=<luks-version>] [at <db>]
     peroxs enroll yubikey [hybrid] --slot=<slot> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
-    peroxs enroll yubikey [hybrid] --slot=<slot> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
+    peroxs enroll yubikey [hybrid] --slot=<slot> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>]  [--luks-version=<luks-version>] [at <db>]
     peroxs init <db-type> [at <db>]
     peroxs list [--all]
     peroxs open <device-or-uuid>... [--name=<name>] [at <db>]
@@ -104,7 +105,19 @@ struct Args {
     flag_backup_db: Option<String>,
     flag_iteration_ms: Option<usize>,
     flag_name: Option<String>,
+    flag_luks_version: Option<u8>,
     flag_slot: Option<u8>,
+}
+
+impl Args {
+    fn paths_or_uuids(&self) -> Result<Vec<PathOrUuid>> {
+        self.arg_device_or_uuid
+            .as_ref()
+            .expect("expecting device paths or uuids")
+            .iter()
+            .map(|s| PathOrUuid::from_str(&s))
+            .collect::<Result<Vec<_>>>()
+    }
 }
 
 fn db_path(args: &Args) -> Result<PathBuf> {
@@ -124,7 +137,19 @@ fn new_container_parameters(args: &Args) -> Option<operation::enroll::NewContain
         let cipher = args.flag_cipher.as_ref().expect("Must supply a cipher string").clone();
         let hash = args.flag_hash.as_ref().expect("Must supply a hash").clone();
         let key_bits = args.flag_key_bits.expect("Must supply key bits");
-        Some(operation::enroll::NewContainerParameters { cipher, hash, key_bits })
+        let container_type = args
+            .flag_luks_version // FIXME - move default to luks2
+            .map_or(operation::enroll::ContainerType::Luks1, |ver| match ver {
+                1 => operation::enroll::ContainerType::Luks1,
+                2 => operation::enroll::ContainerType::Luks2,
+                _ => panic!("Unsupported LUKS version {}", ver),
+            });
+        Some(operation::enroll::NewContainerParameters {
+            cipher,
+            hash,
+            key_bits,
+            container_type,
+        })
     } else {
         None
     }
@@ -155,11 +180,11 @@ fn db_entry_type(args: &Args) -> DbEntryType {
     }
 }
 
-fn enroll<C: Context + DeviceOps>(args: &Args, ctx: &C, maybe_paths: Option<Vec<String>>) -> Result<()> {
+fn enroll<C: Context + DeviceOps>(args: &Args, ctx: &C) -> Result<()> {
     let backup_context = args.flag_backup_db.as_ref().map(PathBuf::from).map(MainContext::new);
     let new_container = new_container_parameters(args);
     let iteration_ms = args.flag_iteration_ms.expect("iteration millis");
-    let device_paths_or_uuids = maybe_paths.expect("expecting device paths or uuids");
+    let device_paths_or_uuids = args.paths_or_uuids()?;
     let entry_type = db_entry_type(&args);
     let name = args.flag_name.clone();
     let keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
@@ -182,8 +207,8 @@ fn enroll<C: Context + DeviceOps>(args: &Args, ctx: &C, maybe_paths: Option<Vec<
     )
 }
 
-fn open<C: Context + DeviceOps>(args: &Args, ctx: &C, maybe_paths: Option<Vec<String>>) -> Result<()> {
-    let device_paths_or_uuids = maybe_paths.expect("expecting device paths or uuids");
+fn open<C: Context + DeviceOps>(args: &Args, ctx: &C) -> Result<()> {
+    let device_paths_or_uuids = args.paths_or_uuids()?;
     let name = args.flag_name.clone();
 
     operation::open::open(
@@ -195,8 +220,8 @@ fn open<C: Context + DeviceOps>(args: &Args, ctx: &C, maybe_paths: Option<Vec<St
     )
 }
 
-fn register<C: Context>(args: &Args, ctx: &C, maybe_paths: Option<Vec<String>>) -> Result<()> {
-    let device_paths_or_uuids = maybe_paths.expect("expecting device paths or uuids");
+fn register<C: Context>(args: &Args, ctx: &C) -> Result<()> {
+    let device_paths_or_uuids = args.paths_or_uuids()?;
     let name = args.flag_name.clone();
     let keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
     let entry_type = db_entry_type(&args);
@@ -220,10 +245,9 @@ fn perform_operation(args: &Args) -> Result<()> {
     });
     let db_path = db_path(args)?;
     let ctx = MainContext::new(db_path);
-    let maybe_paths = args.arg_device_or_uuid.clone();
 
     match args {
-        _ if args.cmd_enroll => enroll(args, &ctx, maybe_paths),
+        _ if args.cmd_enroll => enroll(args, &ctx),
         _ if args.cmd_init => operation::newdb::newdb(&ctx, operation::newdb::Params(db_type_opt.expect("db type"))),
         _ if args.cmd_list => operation::list::list(
             &ctx,
@@ -231,8 +255,8 @@ fn perform_operation(args: &Args) -> Result<()> {
                 only_available: !args.flag_all,
             },
         ),
-        _ if args.cmd_open => open(args, &ctx, maybe_paths),
-        _ if args.cmd_register => register(args, &ctx, maybe_paths),
+        _ if args.cmd_open => open(args, &ctx),
+        _ if args.cmd_register => register(args, &ctx),
         _ => panic!("BUG: Unknown command!"),
     }
 }

@@ -1,8 +1,9 @@
 use peroxide_cryptsetup::context::{Context, PeroxideDbOps};
 use peroxide_cryptsetup::db::{DbEntry, YubikeyEntryType};
+use peroxide_cryptsetup::device::Disks;
 use prettytable::{format, Table};
 
-use crate::operation::{path_or_uuid_to_path, Result};
+use crate::operation::Result;
 
 #[derive(Debug)]
 pub struct Params {
@@ -31,9 +32,9 @@ pub fn list<C: Context>(ctx: &C, params: Params) -> Result<()> {
 }
 
 fn add_table_entry(params: &Params, table: &mut Table, entry: &DbEntry) -> () {
-    let id = DbEntry::volume_id(entry);
+    let id = entry.volume_id();
     let name = id.name.clone().unwrap_or("".to_string());
-    let uuid = format!("{}", id.uuid());
+    let uuid = id.uuid().to_string();
     let typ = match entry {
         &DbEntry::KeyfileEntry { .. } => "keyfile",
         &DbEntry::PassphraseEntry { .. } => "passphrase",
@@ -43,16 +44,15 @@ fn add_table_entry(params: &Params, table: &mut Table, entry: &DbEntry) -> () {
         },
     };
 
-    let maybe_path = path_or_uuid_to_path(&format!("{}", &id.uuid()))
+    let path_opt = Disks::disk_uuid_path(id.uuid())
         .ok()
         .and_then(|p| p.canonicalize().ok());
-
-    let path_cell = maybe_path
+    let path_cell = path_opt
         .as_ref()
         .map(|p| cell!(Fg -> p.to_string_lossy()))
         .unwrap_or(cell!(Fr -> "not present"));
 
-    if params.only_available && maybe_path.is_none() {
+    if params.only_available && path_opt.is_none() {
         ()
     } else {
         // rows are: name,type,uuid,disk
