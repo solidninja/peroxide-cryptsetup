@@ -7,7 +7,7 @@ use ykpers_rs::{
 };
 
 use crate::db::{YubikeyEntryType, YubikeySlot};
-use crate::input::{Error, KeyInput, Result, SecStr};
+use crate::input::{Error, InputName, KeyInput, Result, SecStr};
 
 /// Parameters for Yubikey input
 pub struct YubikeyPrompt {
@@ -22,14 +22,18 @@ pub struct YubikeyPrompt {
 }
 
 impl KeyInput for YubikeyPrompt {
-    fn get_key(&self, prompt: &str) -> Result<SecStr> {
+    fn get_key(&self, name: &InputName) -> Result<SecStr> {
         let mut dev = get_yubikey_device()?;
-        // TODO - verify the prompt looks OK
-        let chal_key = self.passphrase_input.get_key(&format!("Challenge for {}", prompt))?;
+        let suffix = format!("disk {} (uuid={})", name.name, self.uuid);
+        let chal_name = InputName::with_override("challenge".to_string(), format!("Challenge for {}", suffix));
+        let other_name =
+            InputName::with_override("other_hybrid".to_string(), format!("Other passphrase for {}", suffix));
+
+        let chal_key = self.passphrase_input.get_key(&chal_name)?;
         match self.entry_type {
             YubikeyEntryType::ChallengeResponse => read_challenge_response(&mut dev, self.slot, &chal_key),
             YubikeyEntryType::HybridChallengeResponse => {
-                let other_key = self.passphrase_input.get_key("Please enter the other passphrase: ")?;
+                let other_key = self.passphrase_input.get_key(&other_name)?;
                 read_hybrid_challenge_response(&mut dev, self.slot, &chal_key, &other_key, &self.uuid)
             }
         }
@@ -98,14 +102,7 @@ pub mod tests {
             self.responses
                 .get(&(params.slot, challenge))
                 .unwrap_or_else(|| panic!("Nothing found for slot: {:?}, challenge {:?}", params.slot, challenge))
-                .map(|got_bytes| {
-                    // FIXME FIXME FIXME
-                    // oh my, clone_from() is only implemented for arrays up to size 32
-                    for (i, b) in got_bytes.iter().enumerate() {
-                        response[i] = *b;
-                    }
-                    ()
-                })
+                .map(|got_bytes| response.clone_from(got_bytes))
         }
     }
 

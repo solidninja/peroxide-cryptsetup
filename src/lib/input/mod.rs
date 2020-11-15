@@ -14,7 +14,7 @@ use ykpers_rs::Error as YubikeyError;
 #[cfg(feature = "pinentry")]
 use pinentry_rs::Error as PinEntryError;
 
-use crate::db::{DbEntry, VolumeId, YubikeyEntryType, YubikeySlot};
+use crate::db::{DbEntry, YubikeyEntryType, YubikeySlot};
 use serde::export::Formatter;
 
 #[derive(Debug)]
@@ -63,9 +63,33 @@ impl error::Error for Error {
 
 // FIXME: change the prompt get_key to take in a DbEntry
 
+pub struct InputName {
+    pub name: String,
+    pub uuid: Option<uuid::Uuid>,
+    pub prompt_override: Option<String>,
+}
+
+impl InputName {
+    pub fn blank() -> InputName {
+        InputName {
+            name: "".to_string(),
+            uuid: None,
+            prompt_override: None,
+        }
+    }
+
+    pub fn with_override(name: String, prompt_override: String) -> InputName {
+        InputName {
+            name,
+            uuid: None,
+            prompt_override: Some(prompt_override),
+        }
+    }
+}
+
 /// Interface for getting key data (whether from a terminal, a file, etc.)
 pub trait KeyInput {
-    fn get_key(&self, prompt: &str) -> Result<SecStr>;
+    fn get_key(&self, name: &InputName) -> Result<SecStr>;
 }
 
 #[derive(Debug)]
@@ -75,15 +99,24 @@ pub struct KeyInputConfig {
 }
 
 /// Get a key for a given db entry
-pub fn get_key_for<'a, P: AsRef<Path>, PromptFn: FnOnce(&'a VolumeId) -> String>(
-    db_entry: &'a DbEntry,
-    prompt: PromptFn,
+pub fn get_key_for<P: AsRef<Path>>(
+    db_entry: &DbEntry,
     key_input_config: &KeyInputConfig,
     working_dir: P,
+    name_override: Option<String>,
+    prompt_override: Option<String>,
 ) -> Result<SecStr> {
     let method = get_input_method_for(db_entry, key_input_config, working_dir)?;
-    let prompt: String = prompt(db_entry.volume_id());
-    method.get_key(&prompt)
+    let name = name_override
+        .or(db_entry.volume_id().name.clone())
+        .unwrap_or_else(|| "unknown".to_string());
+    let uuid = db_entry.uuid().to_owned();
+    let input = InputName {
+        name,
+        uuid: Some(uuid),
+        prompt_override,
+    };
+    method.get_key(&input)
 }
 
 /// Dispatch on db entry type to get the appropriate key input method

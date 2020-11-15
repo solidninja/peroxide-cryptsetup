@@ -98,9 +98,10 @@ impl DeviceOps for MainContext {
     ) -> Result<String> {
         let key = get_key_for(
             entry,
-            &standard_prompt,
             &self.key_input_config,
             &self.db_path.parent().expect("parent path"),
+            name_override.clone(),
+            None,
         )?;
         self.activate_with_key(entry, &key, name_override, path_override)
     }
@@ -140,9 +141,10 @@ impl DeviceOps for MainContext {
     fn prompt_key(&self, entry: &DbEntry, prompt: String) -> Result<SecStr> {
         get_key_for(
             entry,
-            &move |_| prompt.clone(),
             &self.key_input_config,
             &self.db_path.parent().expect("parent path"),
+            None,
+            Some(prompt),
         )
         .map_err(From::from)
     }
@@ -154,10 +156,6 @@ pub trait DatabaseOps {
 
     /// Find an entry by uuid
     fn find_entry(&self, uuid: &uuid::Uuid) -> Option<&DbEntry>;
-
-    // TODO: deprecate this?
-    /// Given a disk path, find the corresponding db entry
-    fn find_entry_for_disk_path<P: AsRef<Path>>(&self, path: P) -> Option<&DbEntry>;
 }
 
 impl DatabaseOps for PeroxideDb {
@@ -168,17 +166,6 @@ impl DatabaseOps for PeroxideDb {
     fn find_entry(&self, uuid: &uuid::Uuid) -> Option<&DbEntry> {
         self.entries.iter().find(|e| e.volume_id().uuid() == uuid)
     }
-
-    fn find_entry_for_disk_path<P: AsRef<Path>>(&self, path: P) -> Option<&DbEntry> {
-        path.luks_uuid()
-            .ok()
-            .and_then(|disk_uuid| self.entries.iter().find(|e| e.volume_id().uuid() == &disk_uuid))
-    }
-}
-
-// FIXME remove this
-pub fn standard_prompt(volume_id: &VolumeId) -> String {
-    format!("Please enter key for {}: ", volume_id)
 }
 
 #[derive(Debug)]

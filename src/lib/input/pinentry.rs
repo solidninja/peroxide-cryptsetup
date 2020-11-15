@@ -1,7 +1,7 @@
 use pinentry_rs::{pinentry, Error as PinentryError};
 use std::time::Duration;
 
-use crate::input::{Error, KeyInput, Result, SecStr};
+use crate::input::{Error, InputName, KeyInput, Result, SecStr};
 
 /// A prompt using pinentry for password entry
 pub struct PinentryPrompt {
@@ -9,15 +9,27 @@ pub struct PinentryPrompt {
 }
 
 impl KeyInput for PinentryPrompt {
-    fn get_key(&self, prompt: &str) -> Result<SecStr> {
-        // TODO better prompts
-        let mut entry = pinentry().window_title("Unlock disk".to_string());
+    fn get_key(&self, name: &InputName) -> Result<SecStr> {
+        let prompt = name.prompt_override.clone().unwrap_or_else(|| {
+            if let Some(ref uuid) = name.uuid {
+                format!("Enter passphrase for disk {} (uuid={})", name.name, uuid)
+            } else {
+                format!("Enter passphrase for disk {}", name.name)
+            }
+        });
+        let title = if let Some(ref uuid) = name.uuid {
+            format!("Unlock disk (uuid={})", uuid)
+        } else {
+            format!("Unlock disk")
+        };
+
+        let mut entry = pinentry().window_title(title);
 
         if let Some(duration) = self.timeout {
             entry = entry.timeout(duration.as_secs() as u32)
         }
 
-        let pin = entry.pin(prompt.to_string())?;
+        let pin = entry.pin(prompt)?;
 
         Ok(pin)
     }
