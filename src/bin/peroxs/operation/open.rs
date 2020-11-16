@@ -69,7 +69,11 @@ pub fn open<C: Context + DeviceOps>(ctx: &C, params: Params) -> Result<()> {
             let (first, _) = entries_with_path.first().expect("first entry");
             let key = ctx.prompt_key(
                 first,
-                format!("Please enter key for multiple disks [{}, ...]", first.volume_id()),
+                Some(format!(
+                    "Please enter key for multiple disks [{}, ...]",
+                    first.volume_id()
+                )),
+                false,
             )?;
             let _ = entries_with_path
                 .iter()

@@ -22,18 +22,22 @@ pub struct YubikeyPrompt {
 }
 
 impl KeyInput for YubikeyPrompt {
-    fn get_key(&self, name: &InputName) -> Result<SecStr> {
+    fn get_key(&self, name: &InputName, is_new: bool) -> Result<SecStr> {
         let mut dev = get_yubikey_device()?;
-        let suffix = format!("disk {} (uuid={})", name.name, self.uuid);
+        let suffix = if is_new {
+            format!("new disk {}:", name.name)
+        } else {
+            format!("disk {} (uuid={}):", name.name, self.uuid)
+        };
         let chal_name = InputName::with_override("challenge".to_string(), format!("Challenge for {}", suffix));
         let other_name =
             InputName::with_override("other_hybrid".to_string(), format!("Other passphrase for {}", suffix));
 
-        let chal_key = self.passphrase_input.get_key(&chal_name)?;
+        let chal_key = self.passphrase_input.get_key(&chal_name, is_new)?;
         match self.entry_type {
             YubikeyEntryType::ChallengeResponse => read_challenge_response(&mut dev, self.slot, &chal_key),
             YubikeyEntryType::HybridChallengeResponse => {
-                let other_key = self.passphrase_input.get_key(&other_name)?;
+                let other_key = self.passphrase_input.get_key(&other_name, is_new)?;
                 read_hybrid_challenge_response(&mut dev, self.slot, &chal_key, &other_key, &self.uuid)
             }
         }

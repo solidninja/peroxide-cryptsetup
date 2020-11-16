@@ -24,7 +24,9 @@ use std::str::FromStr;
 use docopt::Docopt;
 use log::Level;
 
-use peroxide_cryptsetup::context::{Context, DeviceOps, MainContext};
+use peroxide_cryptsetup::context::{
+    Context, DeviceOps, DiskEnrolmentParams, EntryParams, FormatContainerParams, MainContext,
+};
 use peroxide_cryptsetup::db::{DbEntryType, DbType, PeroxideDb, YubikeyEntryType};
 
 mod operation;
@@ -35,11 +37,11 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static USAGE: &'static str = "
 Usage:
     peroxs enroll keyfile <keyfile> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
-    peroxs enroll keyfile <keyfile> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [--luks-version=<luks-version>] [at <db>]
+    peroxs enroll keyfile <keyfile> new [(--luks1|--luks2)] --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [--luks-version=<luks-version>] [at <db>]
     peroxs enroll passphrase <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
-    peroxs enroll passphrase new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>]  [--luks-version=<luks-version>] [at <db>]
+    peroxs enroll passphrase new [(--luks1|--luks2)] --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>]  [--luks-version=<luks-version>] [at <db>]
     peroxs enroll yubikey [hybrid] --slot=<slot> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
-    peroxs enroll yubikey [hybrid] --slot=<slot> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>]  [--luks-version=<luks-version>] [at <db>]
+    peroxs enroll yubikey [hybrid] --slot=<slot> new [(--luks1|--luks2)] --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>]  [--luks-version=<luks-version>] [at <db>]
     peroxs init <db-type> [at <db>]
     peroxs list [--all]
     peroxs open <device-or-uuid>... [--name=<name>] [at <db>]
@@ -69,6 +71,7 @@ Arguments:
 Options:
     --help                                  Show this message
     --version                               Show the version of peroxs
+    --force                                 Force certain operations (e.g. formatting)
 
     --backup-db <backup-db>                 The path to the backup database to use (if any)
     -c <cipher>, --cipher <cipher>          Cipher to use for new LUKS container
@@ -99,14 +102,16 @@ struct Args {
     flag_version: bool,
     flag_all: bool,
     flag_help: bool,
+    flag_force: bool,
     flag_cipher: Option<String>,
     flag_hash: Option<String>,
     flag_key_bits: Option<usize>,
     flag_backup_db: Option<String>,
-    flag_iteration_ms: Option<usize>,
+    flag_iteration_ms: Option<u32>,
     flag_name: Option<String>,
-    flag_luks_version: Option<u8>,
     flag_slot: Option<u8>,
+    flag_luks1: bool,
+    flag_luks2: bool,
 }
 
 impl Args {
@@ -132,43 +137,87 @@ fn db_path(args: &Args) -> Result<PathBuf> {
         })
 }
 
-fn new_container_parameters(args: &Args) -> Option<operation::enroll::NewContainerParameters> {
-    if args.cmd_new {
-        let cipher = args.flag_cipher.as_ref().expect("Must supply a cipher string").clone();
-        let hash = args.flag_hash.as_ref().expect("Must supply a hash").clone();
-        let key_bits = args.flag_key_bits.expect("Must supply key bits");
-        let container_type = args
-            .flag_luks_version // FIXME - move default to luks2
-            .map_or(operation::enroll::ContainerType::Luks1, |ver| match ver {
-                1 => operation::enroll::ContainerType::Luks1,
-                2 => operation::enroll::ContainerType::Luks2,
-                _ => panic!("Unsupported LUKS version {}", ver),
-            });
-        Some(operation::enroll::NewContainerParameters {
-            cipher,
-            hash,
-            key_bits,
-            container_type,
-        })
+fn cipher_mode(args: &Args) -> (String, String) {
+    // split cipher string by - e.g. 'aes-xts-plain' becomes 'aes' and 'xts-plain'
+    let res = args
+        .flag_cipher
+        .as_ref()
+        .expect("Must supply cipher")
+        .splitn(2, '-')
+        .collect::<Vec<_>>();
+    if res.len() != 2 {
+        panic!("Expect cipher to be splittable by name-mode e.g. aes-xts-plain")
     } else {
-        None
+        (res[0].to_string(), res[1].to_string())
     }
 }
 
-fn yubikey_entry_type(args: &Args) -> Option<YubikeyEntryType> {
-    if args.cmd_yubikey {
-        let entry_type = if args.cmd_hybrid {
-            YubikeyEntryType::HybridChallengeResponse
-        } else {
-            YubikeyEntryType::ChallengeResponse
-        };
-        if args.flag_slot.is_none() {
-            panic!("expecting slot to be specified")
+fn format_params(args: &Args) -> FormatContainerParams {
+    let (cipher, cipher_mode) = cipher_mode(args);
+    let hash = args.flag_hash.as_ref().expect("Must supply hash").to_string();
+    let key_bits = args.flag_key_bits.expect("Must supply key bits");
+    let iteration_ms = args.flag_iteration_ms.expect("iteration millis");
+
+    if args.flag_luks1 {
+        FormatContainerParams::Luks1 {
+            iteration_ms,
+            cipher,
+            cipher_mode,
+            hash,
+            mk_bits: key_bits,
         }
-        Some(entry_type)
     } else {
-        None
+        let parallel_threads = 4; // todo configurable
+        let memory_kb = 512000; // 512MB todo configurable
+        let pbkdf2_iterations = 1_000_000; // todo configurable, benchmarked
+
+        FormatContainerParams::Luks2 {
+            cipher,
+            cipher_mode,
+            mk_bits: key_bits,
+            hash,
+            time_ms: iteration_ms,
+            iterations: pbkdf2_iterations,
+            max_memory_kb: memory_kb,
+            parallel_threads,
+            sector_size: None,
+            data_alignment: None,
+            save_label_in_header: false, // todo configurable
+        }
     }
+}
+
+fn yubikey_entry_params(args: &Args) -> EntryParams {
+    let entry_type = if args.cmd_hybrid {
+        YubikeyEntryType::HybridChallengeResponse
+    } else {
+        YubikeyEntryType::ChallengeResponse
+    };
+    let slot = args.flag_slot.expect("Yubikey slot should be specified");
+    EntryParams::Yubikey(slot, entry_type)
+}
+
+fn enroll_params(args: &Args) -> Result<DiskEnrolmentParams> {
+    let entry_type = db_entry_type(args);
+
+    let entry_params = match entry_type {
+        DbEntryType::Passphrase => EntryParams::Passphrase,
+        DbEntryType::Keyfile => {
+            let path = PathBuf::from(args.arg_keyfile.as_ref().expect("keyfile path"));
+            EntryParams::Keyfile(path)
+        }
+        DbEntryType::Yubikey => yubikey_entry_params(args),
+    };
+
+    let format_container_opt = if args.cmd_new { Some(format_params(args)) } else { None };
+
+    Ok(DiskEnrolmentParams {
+        name: args.flag_name.clone(),
+        entry: entry_params,
+        format_container: format_container_opt,
+        force_format: args.flag_force,
+        iteration_ms: args.flag_iteration_ms.expect("iteration millis"),
+    })
 }
 
 fn db_entry_type(args: &Args) -> DbEntryType {
@@ -181,28 +230,16 @@ fn db_entry_type(args: &Args) -> DbEntryType {
 }
 
 fn enroll<C: Context + DeviceOps>(args: &Args, ctx: &C) -> Result<()> {
+    let enroll_params = enroll_params(args)?;
     let backup_context = args.flag_backup_db.as_ref().map(PathBuf::from).map(MainContext::new);
-    let new_container = new_container_parameters(args);
-    let iteration_ms = args.flag_iteration_ms.expect("iteration millis");
     let device_paths_or_uuids = args.paths_or_uuids()?;
-    let entry_type = db_entry_type(&args);
-    let name = args.flag_name.clone();
-    let keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
-    let yubikey_entry_type = yubikey_entry_type(args);
-    let yubikey_slot = args.flag_slot.clone();
 
     operation::enroll::enroll::<C, MainContext>(
         &ctx,
         operation::enroll::Params {
-            entry_type,
-            new_container,
             device_paths_or_uuids,
-            iteration_ms,
-            keyfile,
             backup_context,
-            name,
-            yubikey_slot,
-            yubikey_entry_type,
+            params: enroll_params,
         },
     )
 }

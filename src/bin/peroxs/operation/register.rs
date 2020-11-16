@@ -37,7 +37,7 @@ pub fn register<C: Context>(ctx: &C, params: Params) -> Result<()> {
 
 fn to_entry(disk_path: PathBuf, params: &Params) -> Result<DbEntry> {
     let uuid = disk_path.luks_uuid()?;
-    let volume_id = VolumeId::new(params.name.clone(), uuid);
+    let volume_id = VolumeId::of(params.name.clone(), uuid);
 
     match params.entry_type {
         DbEntryType::Keyfile => Ok(DbEntry::KeyfileEntry {

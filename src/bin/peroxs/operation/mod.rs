@@ -7,7 +7,7 @@ use std::str::FromStr;
 use errno::Errno;
 use uuid;
 
-use peroxide_cryptsetup::context::Error as ContextError;
+use peroxide_cryptsetup::context::{Error as ContextError, Error};
 use peroxide_cryptsetup::db::Error as DatabaseError;
 use peroxide_cryptsetup::device::{Disks, Error as DeviceError};
 use peroxide_cryptsetup::input::Error as InputError;
@@ -34,6 +34,17 @@ impl fmt::Display for OperationError {
                     }
                 },
                 ContextError::DeviceAlreadyActivated(ref expl) => write!(fmt, "Device is already activated: {}", expl),
+                ContextError::DeviceAlreadyFormatted(ref uuid) => {
+                    write!(fmt, "Device with UUID={} is already formatted as LUKS", uuid)
+                }
+                ContextError::NotAllDisksAlreadyFormatted => {
+                    write!(fmt, "Not all disks were formatted as LUKS containers")
+                }
+                ContextError::EntryAlreadyExists(ref uuid) => write!(
+                    fmt,
+                    "Entry with UUID={} already exists in database, and duplicate entries are not allowed",
+                    uuid
+                ),
                 ContextError::DeviceError(ref de) => match de {
                     DeviceError::CryptsetupError(ref errno) => match errno {
                         Errno(1) => write!(fmt, "Wrong key for disk or permission denied"),
@@ -45,16 +56,9 @@ impl fmt::Display for OperationError {
                     DeviceError::Other(ref expl) => write!(fmt, "Other error occurred: {}", expl),
                 },
                 ContextError::FeatureNotAvailable => write!(fmt, "This feature is not available"),
-                ContextError::KeyInputError(ref kie) => match kie {
-                    InputError::FeatureNotAvailable => write!(fmt, "Key input method is not available"),
-                    InputError::IoError(ref cause) => write!(fmt, "Unknown I/O error during key input: {}", cause),
-                    InputError::UnknownCryptoError => write!(fmt, "Unknown error occurred during crypto operation"),
-                    #[cfg(feature = "yubikey")]
-                    InputError::YubikeyError(ref cause) => write!(fmt, "Yubikey error: {}", cause),
-                    #[cfg(feature = "pinentry")]
-                    InputError::PinentryError(ref cause) => write!(fmt, "Pinentry error: {}", cause),
-                },
+                ContextError::KeyInputError(ref kie) => kie.fmt(fmt),
                 ContextError::VolumeNotFound(ref volume_id) => write!(fmt, "Could not find volume {}", volume_id),
+                Error::DiskIdDuplicatesFound => write!(fmt, "Found disk ID duplicates"),
             },
             OperationError::NotFoundInDb(ref cause) => write!(fmt, "Entry was not found in db: {}", cause),
             OperationError::ValidationFailed(ref cause) => write!(fmt, "Validation failed during operation: {}", cause),

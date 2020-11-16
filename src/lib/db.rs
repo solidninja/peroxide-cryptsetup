@@ -101,7 +101,14 @@ pub struct VolumeId {
 }
 
 impl VolumeId {
-    pub fn new(name: Option<String>, uuid: Uuid) -> VolumeId {
+    pub fn new(name: Option<String>) -> VolumeId {
+        VolumeId {
+            name,
+            id: VolumeUuid { uuid: Uuid::new_v4() },
+        }
+    }
+
+    pub fn of(name: Option<String>, uuid: Uuid) -> VolumeId {
         VolumeId {
             name,
             id: VolumeUuid { uuid },
@@ -167,7 +174,7 @@ impl PeroxideDb {
 }
 
 impl DbEntry {
-    pub fn volume_id<'a>(&'a self) -> &'a VolumeId {
+    pub fn volume_id(&self) -> &VolumeId {
         match *self {
             DbEntry::KeyfileEntry { ref volume_id, .. } => volume_id,
             DbEntry::PassphraseEntry { ref volume_id, .. } => volume_id,
@@ -207,9 +214,9 @@ pub mod tests {
 
     #[test]
     fn test_serialize_volume_id() {
-        expect!(serde_json::to_string(&VolumeId::new(None, Uuid::nil())))
+        expect!(serde_json::to_string(&VolumeId::of(None, Uuid::nil())))
             .to(be_ok().value(r#"{"name":null,"id":{"uuid":"00000000-0000-0000-0000-000000000000"}}"#.to_string()));
-        expect!(serde_json::to_string(&VolumeId::new(
+        expect!(serde_json::to_string(&VolumeId::of(
             Some("foobar".to_string()),
             Uuid::nil()
         )))
@@ -220,7 +227,7 @@ pub mod tests {
     fn test_serialize_keyfile_entry() {
         let entry = DbEntry::KeyfileEntry {
             key_file: PathBuf::from("/path/to/keyfile"),
-            volume_id: VolumeId::new(None, Uuid::nil()),
+            volume_id: VolumeId::of(None, Uuid::nil()),
         };
         expect!(serde_json::to_string(&entry)).to(be_ok().value(r#"{"KeyfileEntry":{"key_file":"/path/to/keyfile","volume_id":{"name":null,"id":{"uuid":"00000000-0000-0000-0000-000000000000"}}}}"#.to_string()));
     }
@@ -228,7 +235,7 @@ pub mod tests {
     #[test]
     fn test_serialize_passphrase_entry() {
         let entry = DbEntry::PassphraseEntry {
-            volume_id: VolumeId::new(None, Uuid::nil()),
+            volume_id: VolumeId::of(None, Uuid::nil()),
         };
         expect!(serde_json::to_string(&entry)).to(be_ok().value(
             r#"{"PassphraseEntry":{"volume_id":{"name":null,"id":{"uuid":"00000000-0000-0000-0000-000000000000"}}}}"#
@@ -241,7 +248,7 @@ pub mod tests {
         let entry = DbEntry::YubikeyEntry {
             entry_type: YubikeyEntryType::HybridChallengeResponse,
             slot: 1,
-            volume_id: VolumeId::new(None, Uuid::nil()),
+            volume_id: VolumeId::of(None, Uuid::nil()),
         };
         expect!(serde_json::to_string(&entry)).to(be_ok().value(r#"{"YubikeyEntry":{"entry_type":"HybridChallengeResponse","slot":1,"volume_id":{"name":null,"id":{"uuid":"00000000-0000-0000-0000-000000000000"}}}}"#.to_string()));
     }
@@ -258,7 +265,7 @@ pub mod tests {
         let mut db = PeroxideDb::new(DbType::Backup);
         db.entries.push(DbEntry::KeyfileEntry {
             key_file: PathBuf::from("keyfile.key"),
-            volume_id: VolumeId::new(Some("test-disk".to_string()), Uuid::nil()),
+            volume_id: VolumeId::of(Some("test-disk".to_string()), Uuid::nil()),
         });
         expect!(serde_json::from_str::<PeroxideDb>(db_json)).to(be_ok().value(db.clone()));
     }

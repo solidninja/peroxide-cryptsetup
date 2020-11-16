@@ -29,7 +29,7 @@ echo "Made db of type backup"
 dd if=/dev/urandom of=keyfile.key count=256
 echo "Made keyfile"
 
-$peroxs enroll keyfile keyfile.key new --cipher aes-xts-plain --hash sha256 --key-bits 256 disk-image --iteration-ms=200 --name "test-disk"
+$peroxs enroll keyfile keyfile.key new --luks1 --cipher aes-xts-plain --hash sha256 --key-bits 256 disk-image --iteration-ms=200 --name "test-disk"
 echo "Enrolled db"
 
 # TODO - need to ensure name is ok before enrolling it?

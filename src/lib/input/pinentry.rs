@@ -9,15 +9,19 @@ pub struct PinentryPrompt {
 }
 
 impl KeyInput for PinentryPrompt {
-    fn get_key(&self, name: &InputName) -> Result<SecStr> {
+    fn get_key(&self, name: &InputName, is_new: bool) -> Result<SecStr> {
         let prompt = name.prompt_override.clone().unwrap_or_else(|| {
-            if let Some(ref uuid) = name.uuid {
-                format!("Enter passphrase for disk {} (uuid={})", name.name, uuid)
+            if is_new {
+                format!("Enter new passphrase for {}:", name.name)
+            } else if let Some(ref uuid) = name.uuid {
+                format!("Enter passphrase for disk {} (uuid={}):", name.name, uuid)
             } else {
-                format!("Enter passphrase for disk {}", name.name)
+                format!("Enter passphrase for disk {}:", name.name)
             }
         });
-        let title = if let Some(ref uuid) = name.uuid {
+        let title = if is_new {
+            format!("New passphrase")
+        } else if let Some(ref uuid) = name.uuid {
             format!("Unlock disk (uuid={})", uuid)
         } else {
             format!("Unlock disk")

@@ -57,7 +57,7 @@ pub trait LuksVolumeOps {
     /// Add new key to LUKS device (given another key)
     fn luks_add_key(&self, iteration_ms: usize, new_key: &SecStr, prev_key: &SecStr) -> Result<Keyslot>;
 
-    /// Format a new LUKS device with the given key
+    /// Format a new LUKS1 device with the given key
     fn luks1_format_with_key(
         &self,
         iteration_ms: usize,
@@ -66,6 +66,23 @@ pub trait LuksVolumeOps {
         hash: &str,
         mk_bits: usize,
         uuid_opt: Option<&Uuid>,
+        key: &SecStr,
+    ) -> Result<Keyslot>;
+
+    fn luks2_format_with_key(
+        &self,
+        cipher: &str,
+        cipher_mode: &str,
+        mk_bits: usize,
+        hash: &str,
+        time_ms: u32,
+        iterations: u32,
+        max_memory_kb: u32,
+        parallel_threads: u32,
+        sector_size: Option<u32>,
+        data_alignment: Option<u32>,
+        uuid_opt: Option<&Uuid>,
+        label_opt: Option<&str>,
         key: &SecStr,
     ) -> Result<Keyslot>;
 
@@ -105,6 +122,34 @@ impl<P: AsRef<Path>> LuksVolumeOps for P {
             uuid_opt,
         )?;
         device.set_iteration_time(iteration_ms as u64);
+        device.add_keyslot(key.unsecure(), None, None).map_err(From::from)
+    }
+
+    fn luks2_format_with_key(
+        &self,
+        cipher: &str,
+        cipher_mode: &str,
+        mk_bits: usize,
+        hash: &str,
+        time_ms: u32,
+        iterations: u32,
+        max_memory_kb: u32,
+        parallel_threads: u32,
+        sector_size: Option<u32>,
+        data_alignment: Option<u32>,
+        uuid_opt: Option<&Uuid>,
+        label_opt: Option<&str>,
+        key: &SecStr,
+    ) -> Result<u8> {
+        let mut format_builder = cryptsetup_rs::format(self)?
+            .luks2(cipher, cipher_mode, mk_bits, uuid_opt, data_alignment, sector_size)
+            .argon2id(hash, time_ms, iterations, max_memory_kb, parallel_threads);
+
+        if let Some(label) = label_opt {
+            format_builder = format_builder.label(label);
+        }
+
+        let mut device = format_builder.start()?;
         device.add_keyslot(key.unsecure(), None, None).map_err(From::from)
     }
 

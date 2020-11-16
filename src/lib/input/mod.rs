@@ -14,7 +14,8 @@ use ykpers_rs::Error as YubikeyError;
 #[cfg(feature = "pinentry")]
 use pinentry_rs::Error as PinEntryError;
 
-use crate::db::{DbEntry, YubikeyEntryType, YubikeySlot};
+use crate::context::{DatabaseOps, DeviceOps};
+use crate::db::{DbEntry, PeroxideDb, YubikeyEntryType, YubikeySlot};
 use serde::export::Formatter;
 
 #[derive(Debug)]
@@ -22,6 +23,8 @@ pub enum Error {
     FeatureNotAvailable,
     IoError(io::Error),
     UnknownCryptoError,
+    BackupDbEntryNotFound(Uuid),
+    BackupDbError(String),
     #[cfg(feature = "yubikey")]
     YubikeyError(YubikeyError),
     #[cfg(feature = "pinentry")]
@@ -42,6 +45,8 @@ impl Display for Error {
             Error::FeatureNotAvailable => write!(f, "Feature is not available"),
             Error::IoError(ref cause) => write!(f, "I/O error: {}", cause),
             Error::UnknownCryptoError => write!(f, "Unknown crypto error - yikes!"),
+            Error::BackupDbError(ref cause) => write!(f, "Backup DB error: {}", cause),
+            Error::BackupDbEntryNotFound(ref uuid) => write!(f, "No backup DB entry found for UUID {}", uuid),
             #[cfg(feature = "yubikey")]
             Error::YubikeyError(ref cause) => write!(f, "Yubikey error: {:?}", cause), // TODO: formatting
             #[cfg(feature = "pinentry")]
@@ -54,14 +59,14 @@ impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Error::IoError(ref cause) => Some(cause),
+            #[cfg(feature = "yubikey")]
             Error::YubikeyError(ref cause) => Some(cause),
+            #[cfg(feature = "pinentry")]
             Error::PinentryError(ref cause) => Some(cause),
             _ => None,
         }
     }
 }
-
-// FIXME: change the prompt get_key to take in a DbEntry
 
 pub struct InputName {
     pub name: String,
@@ -89,7 +94,7 @@ impl InputName {
 
 /// Interface for getting key data (whether from a terminal, a file, etc.)
 pub trait KeyInput {
-    fn get_key(&self, name: &InputName) -> Result<SecStr>;
+    fn get_key(&self, name: &InputName, is_new: bool) -> Result<SecStr>;
 }
 
 #[derive(Debug)]
@@ -105,6 +110,7 @@ pub fn get_key_for<P: AsRef<Path>>(
     working_dir: P,
     name_override: Option<String>,
     prompt_override: Option<String>,
+    is_new: bool,
 ) -> Result<SecStr> {
     let method = get_input_method_for(db_entry, key_input_config, working_dir)?;
     let name = name_override
@@ -116,7 +122,26 @@ pub fn get_key_for<P: AsRef<Path>>(
         uuid: Some(uuid),
         prompt_override,
     };
-    method.get_key(&input)
+    method.get_key(&input, is_new)
+}
+
+/// Special type of input - a prompt that takes a second, backup database - and finds the key there
+pub struct BackupPrompt<Ctx: DeviceOps> {
+    pub db: PeroxideDb,
+    /// Backup database context
+    pub ctx: Ctx,
+}
+
+impl<Ctx: DeviceOps> BackupPrompt<Ctx> {
+    pub fn prompt_key(&self, uuid: &Uuid) -> Result<SecStr> {
+        if let Some(entry) = self.db.find_entry(&uuid) {
+            self.ctx
+                .prompt_key(entry, None, false)
+                .map_err(|e| Error::BackupDbError(format!("Error during backup db operation: {:?}", e)))
+        } else {
+            Err(Error::BackupDbEntryNotFound(uuid.clone()))
+        }
+    }
 }
 
 /// Dispatch on db entry type to get the appropriate key input method

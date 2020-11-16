@@ -9,12 +9,14 @@ pub struct TerminalPrompt {
 }
 
 impl KeyInput for TerminalPrompt {
-    fn get_key(&self, name: &InputName) -> Result<SecStr> {
+    fn get_key(&self, name: &InputName, is_new: bool) -> Result<SecStr> {
         let prompt = name.prompt_override.clone().unwrap_or_else(|| {
-            if let Some(ref uuid) = name.uuid {
-                format!("Enter password to unlock {} (uuid={}):", name.name, uuid)
+            if is_new {
+                format!("Enter new passphrase for {}:", name.name)
+            } else if let Some(ref uuid) = name.uuid {
+                format!("Enter passphrase to unlock {} (uuid={}):", name.name, uuid)
             } else {
-                format!("Enter password to unlock {}:", name.name)
+                format!("Enter passphrase to unlock {}:", name.name)
             }
         });
 

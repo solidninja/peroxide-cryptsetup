@@ -19,6 +19,9 @@ extern crate pinentry_rs;
 #[macro_use]
 extern crate serde_derive;
 
+#[macro_use]
+extern crate vec1;
+
 #[cfg(feature = "yubikey_hybrid")]
 extern crate sodiumoxide;
 
