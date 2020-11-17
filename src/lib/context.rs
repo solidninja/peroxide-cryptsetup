@@ -26,6 +26,7 @@ pub enum Error {
     NotAllDisksAlreadyFormatted,
     DiskIdDuplicatesFound,
     EntryAlreadyExists(Uuid),
+    DiskEntryNotFound(Uuid),
     DeviceError(DeviceError),
     FeatureNotAvailable,
     KeyInputError(InputError),
@@ -248,6 +249,13 @@ pub trait DeviceOps {
         params: DiskEnrolmentParams,
         backup_db: Option<BackupPrompt<BCtx>>,
     ) -> Result<Vec1<DbEntry>>;
+
+    fn open_disks<P: AsRef<Path>>(
+        &self,
+        db: &PeroxideDb,
+        paths: Vec1<P>,
+        name_override: Option<String>,
+    ) -> Result<Vec1<DeviceMapperName>>;
 }
 
 impl DeviceOps for MainContext {
@@ -406,6 +414,52 @@ impl DeviceOps for MainContext {
         self.save_db(&db)?;
 
         Ok(entries)
+    }
+
+    fn open_disks<P: AsRef<Path>>(
+        &self,
+        db: &PeroxideDb,
+        paths: Vec1<P>,
+        name_override: Option<String>,
+    ) -> Result<Vec1<DeviceMapperName>> {
+        let paths_with_uuid = paths.try_mapped(|p| p.luks_uuid().map(|uuid| (p, uuid)))?;
+        let uuids = {
+            let mut uuids = paths_with_uuid.mapped_ref(|pu| pu.1.to_owned());
+            uuids.sort();
+            uuids.dedup();
+            uuids
+        };
+
+        if uuids.len() != paths_with_uuid.len() {
+            return Err(Error::DiskIdDuplicatesFound);
+        }
+
+        let paths_with_disk_entries = paths_with_uuid.try_mapped(|pu| match db.find_entry(&pu.1) {
+            Some(entry) => Ok((pu.0, entry)),
+            None => Err(Error::DiskEntryNotFound(pu.1.clone())),
+        })?;
+
+        if paths_with_disk_entries.len() == 1 {
+            let ((first_path, first_entry), _) = paths_with_disk_entries.split_off_first();
+            self.activate(first_entry, name_override, Some(first_path))
+                .map(Vec1::new)
+        } else {
+            // activate all the entries with the first key
+            // todo: document that this means yubikey disks have all the same key (because tied to uuid of the disk)
+            let key = self.prompt_key(&paths_with_disk_entries.first().1, None, false)?;
+
+            let res = paths_with_disk_entries
+                .into_iter()
+                .enumerate()
+                .map(|(idx, (path, db_entry))| {
+                    // if override name is provided, all disks will start with the same prefix and will be identified by index
+                    let name = name_override.as_ref().map(|name| format!("{}_{}", name, idx));
+                    self.activate_with_key(&db_entry, &key, name, Some(path))
+                })
+                .collect::<Result<Vec<DeviceMapperName>>>()?;
+
+            Ok(Vec1::try_from_vec(res).expect("non-empty vec"))
+        }
     }
 }
 

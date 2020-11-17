@@ -34,6 +34,7 @@ use operation::{PathOrUuid, Result};
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+// TODO: switch to clap
 static USAGE: &'static str = "
 Usage:
     peroxs enroll keyfile <keyfile> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]

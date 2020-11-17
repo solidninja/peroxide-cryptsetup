@@ -7,7 +7,7 @@ use std::str::FromStr;
 use errno::Errno;
 use uuid;
 
-use peroxide_cryptsetup::context::{Error as ContextError, Error};
+use peroxide_cryptsetup::context::Error as ContextError;
 use peroxide_cryptsetup::db::Error as DatabaseError;
 use peroxide_cryptsetup::device::{Disks, Error as DeviceError};
 use peroxide_cryptsetup::input::Error as InputError;
@@ -17,7 +17,6 @@ pub type Result<T> = result::Result<T, OperationError>;
 #[derive(Debug)]
 pub enum OperationError {
     ContextError(ContextError),
-    NotFoundInDb(String),
     ValidationFailed(String),
 }
 
@@ -58,9 +57,11 @@ impl fmt::Display for OperationError {
                 ContextError::FeatureNotAvailable => write!(fmt, "This feature is not available"),
                 ContextError::KeyInputError(ref kie) => kie.fmt(fmt),
                 ContextError::VolumeNotFound(ref volume_id) => write!(fmt, "Could not find volume {}", volume_id),
-                Error::DiskIdDuplicatesFound => write!(fmt, "Found disk ID duplicates"),
+                ContextError::DiskIdDuplicatesFound => write!(fmt, "Found duplicate disk IDs"),
+                ContextError::DiskEntryNotFound(ref uuid) => {
+                    write!(fmt, "Disk with UUID {} not found in database", uuid)
+                }
             },
-            OperationError::NotFoundInDb(ref cause) => write!(fmt, "Entry was not found in db: {}", cause),
             OperationError::ValidationFailed(ref cause) => write!(fmt, "Validation failed during operation: {}", cause),
         }
     }
