@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use cryptsetup_rs;
 
+pub use crate::device::FormatContainerParams;
 pub use cryptsetup_rs::Luks1CryptDeviceHandle as Luks1Device;
 
 use secstr::SecStr;
@@ -62,30 +63,6 @@ impl Context for MainContext {
 }
 
 #[derive(Debug, Clone)]
-pub enum FormatContainerParams {
-    Luks1 {
-        iteration_ms: u32,
-        cipher: String,
-        cipher_mode: String,
-        hash: String,
-        mk_bits: usize,
-    },
-    Luks2 {
-        cipher: String,
-        cipher_mode: String,
-        mk_bits: usize,
-        hash: String,
-        time_ms: u32,
-        iterations: u32,
-        max_memory_kb: u32,
-        parallel_threads: u32,
-        sector_size: Option<u32>,
-        data_alignment: Option<u32>,
-        save_label_in_header: bool,
-    },
-}
-
-#[derive(Debug, Clone)]
 pub enum EntryParams {
     Keyfile(PathBuf),
     Passphrase,
@@ -96,8 +73,9 @@ pub enum EntryParams {
 pub struct DiskEnrolmentParams {
     pub name: Option<String>,
     pub entry: EntryParams,
-    pub format_container: Option<FormatContainerParams>,
+    pub format: bool,
     pub force_format: bool,
+    pub format_params: crate::device::FormatContainerParams,
     pub iteration_ms: u32, // TODO: try to remove this from here
 }
 
@@ -350,7 +328,7 @@ impl DeviceOps for MainContext {
                 if db.entry_exists(uuid) {
                     // validate: entry cannot exist twice
                     return Err(Error::EntryAlreadyExists(uuid.clone()));
-                } else if params.format_container.is_some() && !params.force_format {
+                } else if params.format && !params.force_format {
                     // validate: container should not be already formatted
                     return Err(Error::DeviceAlreadyFormatted(uuid.clone()));
                 }
@@ -358,7 +336,7 @@ impl DeviceOps for MainContext {
             }
         }
 
-        if params.format_container.is_none() && count_formatted != path_count {
+        if !params.format && count_formatted != path_count {
             // validate: all containers should be formatted
             return Err(Error::NotAllDisksAlreadyFormatted);
         }
@@ -393,17 +371,18 @@ impl DeviceOps for MainContext {
         // TODO: first entry is used for all the enrollment, this matters especially for Yubikey UUID handling as it's order dependent
         let first_entry = &entries_with_path.first().1;
 
-        let _keyslots = if let Some(ref format_params) = params.format_container {
+        let _keyslots = if params.format {
             let new_key = prompt_new_key(self, first_entry)?;
-            entries_with_path
-                .try_mapped_ref(|(disk_path, entry)| format_container(disk_path, &entry, &format_params, &new_key))?
+            entries_with_path.try_mapped_ref(|(disk_path, entry)| {
+                format_container(disk_path, &entry, &params.format_params, &new_key)
+            })?
         } else {
             let prev_key = prompt_old_key(self, backup_db, first_entry.volume_id())?;
             let new_key = prompt_new_key(self, first_entry)?;
 
             entries_with_path.try_mapped_ref(|(disk_path, _)| {
-                (*disk_path) // FIXME luks2
-                    .luks1_add_key(params.iteration_ms as usize, &new_key, &prev_key)
+                (*disk_path)
+                    .luks_add_key(params.iteration_ms as usize, &new_key, &prev_key, &params.format_params)
                     .map_err::<Error, _>(From::from)
             })?
         };

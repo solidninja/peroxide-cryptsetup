@@ -141,7 +141,8 @@ struct LuksFormatParams {
         long,
         visible_alias = "save-label",
         about = "Save the name provide in the LUKS header",
-        conflicts_with = "luks1"
+        conflicts_with = "luks1",
+        requires = "format"
     )]
     save_label_in_header: bool,
 }
@@ -154,7 +155,7 @@ struct EnrollCommon {
     format_params: LuksFormatParams,
     #[clap(short, long, about = "The name of the device in the database")]
     name: Option<String>,
-    #[clap(long, about = "Path to another database that can be used to unlock the device", value_hint = ValueHint::FilePath)]
+    #[clap(long, about = "Path to another database that can be used to unlock the device", value_hint = ValueHint::FilePath, conflicts_with = "format")]
     backup_db: Option<PathBuf>,
 }
 
@@ -312,17 +313,14 @@ fn enroll(cmd: EnrollCommand) -> Result<operation::enroll::Params<MainContext>> 
         }
     };
 
-    let format_opt = if common.format_params.format {
-        Some(format_params(&common.format_params))
-    } else {
-        None
-    };
+    let format_params = format_params(&common.format_params);
 
     let params = DiskEnrolmentParams {
         name: common.name,
         entry,
-        format_container: format_opt,
+        format: common.format_params.format,
         force_format: common.format_params.force_format,
+        format_params,
         iteration_ms: common.format_params.iteration_ms,
     };
 

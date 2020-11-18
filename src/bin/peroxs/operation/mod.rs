@@ -25,6 +25,9 @@ impl fmt::Display for OperationError {
         match self {
             OperationError::ContextError(ref ce) => match ce {
                 ContextError::DatabaseError(ref dbe) => match dbe {
+                    DatabaseError::DatabaseNotFound(ref path) => {
+                        write!(fmt, "Database not found at {}", path.display())
+                    }
                     DatabaseError::IoError(ref path, ref cause) => {
                         write!(fmt, "I/O error working on database {}: {}", path.display(), cause)
                     }

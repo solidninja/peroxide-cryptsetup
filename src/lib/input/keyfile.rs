@@ -3,7 +3,7 @@ use std::io;
 use std::io::Read;
 use std::path::PathBuf;
 
-use crate::input::{InputName, KeyInput, Result, SecStr};
+use crate::input::{Error, InputName, KeyInput, Result, SecStr};
 
 /// Parameters for key file input
 pub struct KeyfilePrompt {
@@ -13,6 +13,10 @@ pub struct KeyfilePrompt {
 
 impl KeyInput for KeyfilePrompt {
     fn get_key(&self, _name: &InputName, _is_new: bool) -> Result<SecStr> {
+        if !self.key_file.exists() {
+            return Err(Error::FileNotFound(self.key_file.clone()));
+        }
+
         let mut file = File::open(&self.key_file)?;
         let meta = file.metadata()?;
         let mut key = Vec::with_capacity(meta.len() as usize);

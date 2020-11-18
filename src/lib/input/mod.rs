@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt::Display;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::result;
 use std::time::Duration;
 
@@ -21,6 +21,7 @@ use serde::export::Formatter;
 #[derive(Debug)]
 pub enum Error {
     FeatureNotAvailable,
+    FileNotFound(PathBuf),
     IoError(io::Error),
     UnknownCryptoError,
     BackupDbEntryNotFound(Uuid),
@@ -43,6 +44,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::FeatureNotAvailable => write!(f, "Feature is not available"),
+            Error::FileNotFound(ref path) => write!(f, "'{}' not found", path.display()),
             Error::IoError(ref cause) => write!(f, "I/O error: {}", cause),
             Error::UnknownCryptoError => write!(f, "Unknown crypto error - yikes!"),
             Error::BackupDbError(ref cause) => write!(f, "Backup DB error: {}", cause),
@@ -183,12 +185,21 @@ fn passphrase(timeout: Option<Duration>) -> impl KeyInput {
 
 /// Create parameters for a keyfile input (a physical file)
 fn keyfile(key_path: &Path, working_dir: &Path) -> Result<impl KeyInput> {
+    let not_found_handler = |e: io::Error| {
+        if e.kind() == io::ErrorKind::NotFound {
+            Error::FileNotFound(key_path.to_path_buf())
+        } else {
+            From::from(e)
+        }
+    };
+
     // The key path may be relative to a working directory (which is typically the directory the peroxide db is in)
     let key_file = if key_path.is_relative() {
-        working_dir.to_path_buf().join(key_path).canonicalize()?
+        working_dir.to_path_buf().join(key_path).canonicalize()
     } else {
-        key_path.to_path_buf().canonicalize()?
-    };
+        key_path.to_path_buf().canonicalize()
+    }
+    .map_err(not_found_handler)?;
     debug!("Will read from key path {}", key_file.display());
 
     Ok(keyfile::KeyfilePrompt { key_file })

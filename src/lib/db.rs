@@ -19,6 +19,7 @@ pub const PEROXIDE_DB_NAME: &'static str = "peroxs-db.json";
 
 #[derive(Debug)]
 pub enum Error {
+    DatabaseNotFound(PathBuf),
     IoError(PathBuf, io::Error),
     SerialisationError(serde_json::Error),
 }
@@ -27,7 +28,11 @@ pub type Result<T> = result::Result<T, Error>;
 
 impl<P: AsRef<Path>> From<(P, io::Error)> for Error {
     fn from(e: (P, io::Error)) -> Self {
-        Error::IoError(e.0.as_ref().to_path_buf(), e.1)
+        if e.1.kind() == std::io::ErrorKind::NotFound {
+            Error::DatabaseNotFound(e.0.as_ref().to_path_buf())
+        } else {
+            Error::IoError(e.0.as_ref().to_path_buf(), e.1)
+        }
     }
 }
 
@@ -40,6 +45,7 @@ impl From<serde_json::Error> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Error::DatabaseNotFound(ref path) => write!(f, "Database not found at {}", path.display()),
             Error::IoError(ref path, ref e) => write!(f, "I/O error [database={}, cause={}]", path.display(), e),
             Error::SerialisationError(ref e) => write!(f, "Database serialisation error [cause={}]", e),
         }

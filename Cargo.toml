@@ -20,7 +20,7 @@ test = false
 
 [dependencies]
 clap = "3.0.0-beta.2"
-cryptsetup-rs = "0.3.0-beta1"
+cryptsetup-rs = { version = "0.3.0-beta2", path = "../cryptsetup-rs" }
 env_logger = "0.7.1"
 errno = "0.2.5"
 libc = "0.2.71"

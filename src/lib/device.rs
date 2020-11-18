@@ -7,8 +7,9 @@ use std::result;
 
 use cryptsetup_rs;
 pub use cryptsetup_rs::Keyslot;
-use cryptsetup_rs::{CryptDevice, LuksCryptDevice};
+use cryptsetup_rs::{CryptDevice, Luks2CryptDevice, LuksCryptDevice};
 
+use cryptsetup_rs::api::crypt_pbkdf_algo_type;
 use errno;
 use secstr::SecStr;
 use uuid::Uuid;
@@ -50,12 +51,42 @@ const DEV_MAPPER: &'static str = "/dev/mapper";
 
 const UUID_LENGTH: usize = 36;
 
+#[derive(Debug, Clone)]
+pub enum FormatContainerParams {
+    Luks1 {
+        iteration_ms: u32,
+        cipher: String,
+        cipher_mode: String,
+        hash: String,
+        mk_bits: usize,
+    },
+    Luks2 {
+        cipher: String,
+        cipher_mode: String,
+        mk_bits: usize,
+        hash: String,
+        time_ms: u32,
+        iterations: u32,
+        max_memory_kb: u32,
+        parallel_threads: u32,
+        sector_size: Option<u32>,
+        data_alignment: Option<u32>,
+        save_label_in_header: bool,
+    },
+}
+
 pub trait LuksVolumeOps {
     /// Activate the LUKS device with the given name
     fn luks_activate(&self, name: &str, key: &SecStr) -> Result<Keyslot>;
 
     /// Add new key to LUKS device (given another key)
-    fn luks1_add_key(&self, iteration_ms: usize, new_key: &SecStr, prev_key: &SecStr) -> Result<Keyslot>;
+    fn luks_add_key(
+        &self,
+        iteration_ms: usize,
+        new_key: &SecStr,
+        prev_key: &SecStr,
+        params: &FormatContainerParams,
+    ) -> Result<Keyslot>;
 
     /// Format a new LUKS1 device with the given key
     fn luks1_format_with_key(
@@ -99,12 +130,51 @@ impl<P: AsRef<Path>> LuksVolumeOps for P {
         Ok(keyslot)
     }
 
-    fn luks1_add_key(&self, iteration_ms: usize, new_key: &SecStr, prev_key: &SecStr) -> Result<Keyslot> {
-        let mut device = cryptsetup_rs::open(self)?.luks1()?;
-        device.set_iteration_time(iteration_ms as u64);
-        device
-            .add_keyslot(new_key.unsecure(), Some(prev_key.unsecure()), None)
-            .map_err(From::from)
+    fn luks_add_key(
+        &self,
+        iteration_ms: usize,
+        new_key: &SecStr,
+        prev_key: &SecStr,
+        params: &FormatContainerParams,
+    ) -> Result<Keyslot> {
+        // note: impl trait in closure would help: https://github.com/rust-lang/rust/issues/63065
+        cryptsetup_rs::open(self)?.luks()?.either(
+            |mut luks1| {
+                luks1.set_iteration_time(iteration_ms as u64);
+                luks1
+                    .add_keyslot(new_key.unsecure(), Some(prev_key.unsecure()), None)
+                    .map_err(From::from)
+            },
+            |mut luks2| {
+                luks2.set_iteration_time(iteration_ms as u64);
+
+                match params {
+                    FormatContainerParams::Luks2 {
+                        hash,
+                        time_ms,
+                        iterations,
+                        max_memory_kb,
+                        parallel_threads,
+                        ..
+                    } => {
+                        // always use argon2id
+                        luks2.set_pbkdf_params(
+                            crypt_pbkdf_algo_type::argon2id,
+                            hash,
+                            *time_ms,
+                            *iterations,
+                            *max_memory_kb,
+                            *parallel_threads,
+                        )?
+                    }
+                    _ => (),
+                }
+
+                luks2
+                    .add_keyslot(new_key.unsecure(), Some(prev_key.unsecure()), None)
+                    .map_err(From::from)
+            },
+        )
     }
 
     fn luks1_format_with_key(
