@@ -1,151 +1,255 @@
 #![deny(warnings)]
 #![deny(bare_trait_objects)]
 #[warn(unused_must_use)]
-extern crate docopt;
+extern crate clap;
 extern crate env_logger;
 extern crate errno;
-extern crate peroxide_cryptsetup;
-extern crate uuid;
-
 #[macro_use]
 extern crate log;
-
+extern crate peroxide_cryptsetup;
 #[macro_use]
 extern crate prettytable;
-
-#[macro_use]
 extern crate serde_derive;
+extern crate uuid;
 
-use std::env;
 use std::path::PathBuf;
 use std::process::exit;
-use std::str::FromStr;
 
-use docopt::Docopt;
+use clap::{AppSettings, Clap, ValueHint};
 use log::Level;
 
-use peroxide_cryptsetup::context::{
-    Context, DeviceOps, DiskEnrolmentParams, EntryParams, FormatContainerParams, MainContext,
-};
-use peroxide_cryptsetup::db::{DbEntryType, DbType, PeroxideDb, YubikeyEntryType};
+use operation::{PathOrUuid, Result};
+use peroxide_cryptsetup::context::{DiskEnrolmentParams, EntryParams, FormatContainerParams, MainContext};
+use peroxide_cryptsetup::db::{DbEntryType, DbType, YubikeyEntryType};
 
 mod operation;
-use operation::{PathOrUuid, Result};
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
-// TODO: switch to clap
-static USAGE: &'static str = "
-Usage:
-    peroxs enroll keyfile <keyfile> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
-    peroxs enroll keyfile <keyfile> new [(--luks1|--luks2)] --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [--luks-version=<luks-version>] [at <db>]
-    peroxs enroll passphrase <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
-    peroxs enroll passphrase new [(--luks1|--luks2)] --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>]  [--luks-version=<luks-version>] [at <db>]
-    peroxs enroll yubikey [hybrid] --slot=<slot> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
-    peroxs enroll yubikey [hybrid] --slot=<slot> new [(--luks1|--luks2)] --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>]  [--luks-version=<luks-version>] [at <db>]
-    peroxs init <db-type> [at <db>]
-    peroxs list [--all]
-    peroxs open <device-or-uuid>... [--name=<name>] [at <db>]
-    peroxs register keyfile <keyfile> <device-or-uuid>...  [--name=<name>] [at <db>]
-    peroxs register passphrase <device-or-uuid>...  [--name=<name>] [at <db>]
-    peroxs (--help | --version)
-
-Actions:
-    enroll                                  Enroll a new or existing LUKS disk(s) with a given key type and parameters 
-    init                                    Create a new database of the specified type
-    list                                    List disks that are in the database and available
-    open                                    Open an existing LUKS disk(s) with parameters from the database
-    register                                Add an existing keyfile/passphrase entry in the database for a LUKS disk(s)
-
-Enrollment types:
-    keyfile                                 An existing key file with randomness inside
-    passphrase                              A password or passphrase
-    yubikey                                 A Yubikey (combined with challenge)
-    yubikey hybrid                          A Yubikey (combined with challenge) and a secondary passphrase
-
-Arguments:
-    <db>                                    The path to the database
-    <db-type>                               The database type (used when creating). One of: operation,backup
-    <device-or-uuid>                        The path to the device or the uuid of the device
-    <keyfile>                               The path to the key file 
-
-Options:
-    --help                                  Show this message
-    --version                               Show the version of peroxs
-    --force                                 Force certain operations (e.g. formatting)
-
-    --backup-db <backup-db>                 The path to the backup database to use (if any)
-    -c <cipher>, --cipher <cipher>          Cipher to use for new LUKS container
-    -i <ms>, --iteration-ms <ms>            Number of milliseconds to wait for the PBKDF2 function iterations
-    -h <hash>, --hash <hash>                Hash function to use for new LUKS container
-    -n <name>, --name <name>                Name for the device being enrolled
-    -s <key-bits>, --key-bits <key-bits>    Number of key bits to use for new LUKS container
-    -S <slot>, --slot <slot>                Slot in Yubikey to use
-";
-
-#[derive(Deserialize, Debug)]
-struct Args {
-    cmd_init: bool,
-    cmd_enroll: bool,
-    cmd_new: bool,
-    cmd_open: bool,
-    cmd_keyfile: bool,
-    cmd_list: bool,
-    cmd_passphrase: bool,
-    cmd_yubikey: bool,
-    cmd_hybrid: bool,
-    cmd_at: bool,
-    cmd_register: bool,
-    arg_db: Option<String>,
-    arg_db_type: Option<String>,
-    arg_device_or_uuid: Option<Vec<String>>,
-    arg_keyfile: Option<String>,
-    flag_version: bool,
-    flag_all: bool,
-    flag_help: bool,
-    flag_force: bool,
-    flag_cipher: Option<String>,
-    flag_hash: Option<String>,
-    flag_key_bits: Option<usize>,
-    flag_backup_db: Option<String>,
-    flag_iteration_ms: Option<u32>,
-    flag_name: Option<String>,
-    flag_slot: Option<u8>,
-    flag_luks1: bool,
-    flag_luks2: bool,
+#[derive(Clap, Debug)]
+#[clap(author, about, version,
+global_setting = AppSettings::ColoredHelp,
+global_setting = AppSettings::VersionlessSubcommands,
+max_term_width=120)]
+struct Opts {
+    #[clap(subcommand)]
+    subcmd: TopSubcommand,
+    #[clap(flatten)]
+    global: GlobalOpts,
 }
 
-impl Args {
-    fn paths_or_uuids(&self) -> Result<Vec<PathOrUuid>> {
-        self.arg_device_or_uuid
-            .as_ref()
-            .expect("expecting device paths or uuids")
-            .iter()
-            .map(|s| PathOrUuid::from_str(&s))
-            .collect::<Result<Vec<_>>>()
-    }
+#[derive(Clap, Debug)]
+struct GlobalOpts {
+    #[clap(short, long, visible_aliases = &["db"], about = "The database to use", default_value = "peroxs-db.json", value_hint = ValueHint::FilePath, global=true)]
+    database: PathBuf,
 }
 
-fn db_path(args: &Args) -> Result<PathBuf> {
-    args.arg_db
-        .as_ref()
-        .map(PathBuf::from)
-        .map(Ok) // gwah!
-        .unwrap_or_else(|| {
-            PeroxideDb::default_location()
-                .map_err(From::from)
-                .map_err(From::<peroxide_cryptsetup::context::Error>::from)
-        })
+#[derive(Clap, Debug)]
+enum TopSubcommand {
+    #[clap(about = "Enroll a new or existing LUKS disk(s) in the database (adding a new keyslot)")]
+    Enroll(EnrollCommand),
+    #[clap(about = "Initialize a new peroxide-db database")]
+    Init(InitCommand),
+    #[clap(about = "List disks enrolled in a database")]
+    List(ListCommand),
+    #[clap(about = "Open enrolled LUKS disk(s)")]
+    Open(OpenCommand),
+    #[clap(about = "Register an existing entry in the database (without adding a new keyslot)")]
+    Register(RegisterCommand),
 }
 
-fn cipher_mode(args: &Args) -> (String, String) {
+#[derive(Clap, Debug)]
+struct EnrollCommand {
+    #[clap(subcommand)]
+    subcmd: EnrollSubcommand,
+}
+
+#[derive(Clap, Debug)]
+enum EnrollSubcommand {
+    #[clap(about = "Enroll using a keyfile")]
+    Keyfile(EnrollKeyfile),
+    #[clap(about = "Enroll using a passphrase")]
+    Passphrase(EnrollPassphrase),
+    #[cfg(feature = "yubikey")]
+    #[clap(about = "Enroll using a Yubikey token")]
+    Yubikey(EnrollYubikey),
+}
+
+#[derive(Clap, Debug)]
+struct LuksFormatParams {
+    #[clap(long, visible_alias = "new", about = "Format the LUKS container")]
+    format: bool,
+    #[clap(
+        long,
+        visible_alias = "force",
+        about = "Force format the LUKS container",
+        requires = "format"
+    )]
+    force_format: bool,
+    #[clap(short='1', long, about = "Use LUKS version 1", groups=&["luks-version"])]
+    luks1: bool,
+    #[clap(short='2', long, about = "Use LUKS version 2 (default)", groups=&["luks-version"])]
+    luks2: bool,
+    #[clap(
+        short = 'i',
+        long,
+        about = "Number of milliseconds to wait for the PBKDF2 function iterations",
+        default_value = "1000"
+    )]
+    iteration_ms: u32,
+    #[clap(
+        short = 's',
+        long,
+        about = "Number of key bits to use for new LUKS container",
+        default_value = "512"
+    )]
+    key_bits: usize,
+    #[clap(
+        short = 'c',
+        long,
+        about = "Cipher to use for new LUKS container",
+        default_value = "aes-xts-plain"
+    )]
+    cipher: String,
+    #[clap(
+        short = 'h',
+        long,
+        about = "Hash function to use for new LUKS container",
+        default_value = "sha256"
+    )]
+    hash: String,
+    #[clap(
+        long,
+        about = "Number of iterations for argon2",
+        default_value = "1000000",
+        conflicts_with = "luks1"
+    )]
+    argon2_iterations: u32,
+    #[clap(
+        long,
+        about = "Number of parallel threads for argon2",
+        default_value = "4",
+        conflicts_with = "luks1"
+    )]
+    argon2_parallel_threads: u32,
+    #[clap(
+        long,
+        about = "Memory to use for argon2",
+        default_value = "512000",
+        conflicts_with = "luks1"
+    )]
+    argon2_memory_kb: u32,
+    #[clap(
+        long,
+        visible_alias = "save-label",
+        about = "Save the name provide in the LUKS header",
+        conflicts_with = "luks1"
+    )]
+    save_label_in_header: bool,
+}
+
+#[derive(Clap, Debug)]
+struct EnrollCommon {
+    #[clap(about = "The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
+    device_or_uuid: Vec<PathOrUuid>,
+    #[clap(flatten)]
+    format_params: LuksFormatParams,
+    #[clap(short, long, about = "The name of the device in the database")]
+    name: Option<String>,
+    #[clap(long, about = "Path to another database that can be used to unlock the device", value_hint = ValueHint::FilePath)]
+    backup_db: Option<PathBuf>,
+}
+
+#[derive(Clap, Debug)]
+struct EnrollKeyfile {
+    #[clap(about = "An existing key file with randomness inside", value_hint = ValueHint::FilePath)]
+    keyfile: PathBuf,
+    #[clap(flatten)]
+    common: EnrollCommon,
+}
+
+#[derive(Clap, Debug)]
+struct EnrollPassphrase {
+    #[clap(flatten)]
+    common: EnrollCommon,
+}
+
+#[cfg(feature = "yubikey")]
+#[derive(Clap, Debug)]
+struct EnrollYubikey {
+    #[cfg(feature = "yubikey_hybrid")]
+    #[clap(long, about = "Use the yubikey-hybrid key derivation mechanism")]
+    hybrid: bool,
+    #[clap(short='S', long, about = "Slot in yubikey to use", possible_values=&["1", "2"])]
+    slot: u8,
+    #[clap(flatten)]
+    common: EnrollCommon,
+}
+
+#[derive(Clap, Debug)]
+struct InitCommand {
+    #[clap(about = "Database type to enroll", possible_values = &["operation", "backup"])]
+    db_type: DbType,
+}
+
+#[derive(Clap, Debug)]
+struct ListCommand {
+    #[clap(
+        long,
+        about = "List all devices in database, regardless of whether they can be found to be attached to the system currently"
+    )]
+    all: bool,
+}
+
+#[derive(Clap, Debug)]
+struct OpenCommand {
+    #[clap(
+        short,
+        long,
+        about = "Override name specified in database (if any) when activating the device"
+    )]
+    name: Option<String>,
+    #[clap(about = "The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
+    device_or_uuid: Vec<PathOrUuid>,
+}
+
+#[derive(Clap, Debug)]
+struct RegisterCommand {
+    #[clap(subcommand)]
+    subcmd: RegisterSubcommand,
+}
+
+#[derive(Clap, Debug)]
+enum RegisterSubcommand {
+    #[clap(about = "Register an existing keyfile")]
+    Keyfile(RegisterKeyfile),
+    #[clap(about = "Register an existing passphrase")]
+    Passphrase(RegisterPassphrase),
+}
+
+#[derive(Clap, Debug)]
+struct RegisterCommon {
+    #[clap(about = "The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
+    device_or_uuid: Vec<PathOrUuid>,
+    #[clap(short, long, about = "The name of the device in the database")]
+    name: Option<String>,
+}
+
+#[derive(Clap, Debug)]
+struct RegisterKeyfile {
+    #[clap(about = "Path to an existing keyfile", value_hint = ValueHint::FilePath)]
+    keyfile: PathBuf,
+    #[clap(flatten)]
+    common: RegisterCommon,
+}
+
+#[derive(Clap, Debug)]
+struct RegisterPassphrase {
+    #[clap(flatten)]
+    common: RegisterCommon,
+}
+
+fn cipher_mode(params: &LuksFormatParams) -> (String, String) {
     // split cipher string by - e.g. 'aes-xts-plain' becomes 'aes' and 'xts-plain'
-    let res = args
-        .flag_cipher
-        .as_ref()
-        .expect("Must supply cipher")
-        .splitn(2, '-')
-        .collect::<Vec<_>>();
+    let res = params.cipher.splitn(2, '-').collect::<Vec<_>>();
     if res.len() != 2 {
         panic!("Expect cipher to be splittable by name-mode e.g. aes-xts-plain")
     } else {
@@ -153,13 +257,13 @@ fn cipher_mode(args: &Args) -> (String, String) {
     }
 }
 
-fn format_params(args: &Args) -> FormatContainerParams {
-    let (cipher, cipher_mode) = cipher_mode(args);
-    let hash = args.flag_hash.as_ref().expect("Must supply hash").to_string();
-    let key_bits = args.flag_key_bits.expect("Must supply key bits");
-    let iteration_ms = args.flag_iteration_ms.expect("iteration millis");
+fn format_params(params: &LuksFormatParams) -> FormatContainerParams {
+    let (cipher, cipher_mode) = cipher_mode(params);
+    let hash = params.hash.clone();
+    let key_bits = params.key_bits.clone();
+    let iteration_ms = params.iteration_ms.clone();
 
-    if args.flag_luks1 {
+    if params.luks1 {
         FormatContainerParams::Luks1 {
             iteration_ms,
             cipher,
@@ -168,135 +272,98 @@ fn format_params(args: &Args) -> FormatContainerParams {
             mk_bits: key_bits,
         }
     } else {
-        let parallel_threads = 4; // todo configurable
-        let memory_kb = 512000; // 512MB todo configurable
-        let pbkdf2_iterations = 1_000_000; // todo configurable, benchmarked
-
         FormatContainerParams::Luks2 {
             cipher,
             cipher_mode,
             mk_bits: key_bits,
             hash,
             time_ms: iteration_ms,
-            iterations: pbkdf2_iterations,
-            max_memory_kb: memory_kb,
-            parallel_threads,
+            iterations: params.argon2_iterations,
+            max_memory_kb: params.argon2_memory_kb,
+            parallel_threads: params.argon2_parallel_threads,
             sector_size: None,
             data_alignment: None,
-            save_label_in_header: false, // todo configurable
+            save_label_in_header: params.save_label_in_header,
         }
     }
 }
 
-fn yubikey_entry_params(args: &Args) -> EntryParams {
-    let entry_type = if args.cmd_hybrid {
-        YubikeyEntryType::HybridChallengeResponse
-    } else {
-        YubikeyEntryType::ChallengeResponse
-    };
-    let slot = args.flag_slot.expect("Yubikey slot should be specified");
-    EntryParams::Yubikey(slot, entry_type)
-}
-
-fn enroll_params(args: &Args) -> Result<DiskEnrolmentParams> {
-    let entry_type = db_entry_type(args);
-
-    let entry_params = match entry_type {
-        DbEntryType::Passphrase => EntryParams::Passphrase,
-        DbEntryType::Keyfile => {
-            let path = PathBuf::from(args.arg_keyfile.as_ref().expect("keyfile path"));
-            EntryParams::Keyfile(path)
+fn enroll(cmd: EnrollCommand) -> Result<operation::enroll::Params<MainContext>> {
+    // let backup_ctx = cmd.flag_backup_db.as_ref().map(PathBuf::from).map(MainContext::new);
+    let (common, entry) = match cmd.subcmd {
+        EnrollSubcommand::Keyfile(keyfile) => {
+            let params = EntryParams::Keyfile(keyfile.keyfile);
+            (keyfile.common, params)
         }
-        DbEntryType::Yubikey => yubikey_entry_params(args),
+        EnrollSubcommand::Passphrase(passphrase) => {
+            let params = EntryParams::Passphrase;
+            (passphrase.common, params)
+        }
+        EnrollSubcommand::Yubikey(yubikey) => {
+            let entry_type = if yubikey.hybrid {
+                YubikeyEntryType::HybridChallengeResponse
+            } else {
+                YubikeyEntryType::ChallengeResponse
+            };
+
+            let params = EntryParams::Yubikey(yubikey.slot, entry_type);
+
+            (yubikey.common, params)
+        }
     };
 
-    let format_container_opt = if args.cmd_new { Some(format_params(args)) } else { None };
+    let format_opt = if common.format_params.format {
+        Some(format_params(&common.format_params))
+    } else {
+        None
+    };
 
-    Ok(DiskEnrolmentParams {
-        name: args.flag_name.clone(),
-        entry: entry_params,
-        format_container: format_container_opt,
-        force_format: args.flag_force,
-        iteration_ms: args.flag_iteration_ms.expect("iteration millis"),
+    let params = DiskEnrolmentParams {
+        name: common.name,
+        entry,
+        format_container: format_opt,
+        force_format: common.format_params.force_format,
+        iteration_ms: common.format_params.iteration_ms,
+    };
+
+    let backup_context = common.backup_db.map(MainContext::new);
+
+    Ok(operation::enroll::Params {
+        device_paths_or_uuids: common.device_or_uuid,
+        backup_context,
+        params,
     })
 }
 
-fn db_entry_type(args: &Args) -> DbEntryType {
-    match args {
-        _ if args.cmd_passphrase => DbEntryType::Passphrase,
-        _ if args.cmd_keyfile => DbEntryType::Keyfile,
-        _ if args.cmd_yubikey => DbEntryType::Yubikey,
-        _ => panic!("BUG: Unrecognised entry type!"),
-    }
+fn list(cmd: ListCommand) -> Result<operation::list::Params> {
+    Ok(operation::list::Params {
+        only_available: !cmd.all,
+    })
 }
 
-fn enroll<C: Context + DeviceOps>(args: &Args, ctx: &C) -> Result<()> {
-    let enroll_params = enroll_params(args)?;
-    let backup_context = args.flag_backup_db.as_ref().map(PathBuf::from).map(MainContext::new);
-    let device_paths_or_uuids = args.paths_or_uuids()?;
-
-    operation::enroll::enroll::<C, MainContext>(
-        &ctx,
-        operation::enroll::Params {
-            device_paths_or_uuids,
-            backup_context,
-            params: enroll_params,
-        },
-    )
+fn newdb(cmd: InitCommand) -> Result<operation::newdb::Params> {
+    Ok(operation::newdb::Params(cmd.db_type))
 }
 
-fn open<C: Context + DeviceOps>(args: &Args, ctx: &C) -> Result<()> {
-    let device_paths_or_uuids = args.paths_or_uuids()?;
-    let name = args.flag_name.clone();
-
-    operation::open::open(
-        ctx,
-        operation::open::Params {
-            device_paths_or_uuids,
-            name,
-        },
-    )
+fn open(cmd: OpenCommand) -> Result<operation::open::Params> {
+    Ok(operation::open::Params {
+        device_paths_or_uuids: cmd.device_or_uuid,
+        name: cmd.name,
+    })
 }
 
-fn register<C: Context>(args: &Args, ctx: &C) -> Result<()> {
-    let device_paths_or_uuids = args.paths_or_uuids()?;
-    let name = args.flag_name.clone();
-    let keyfile = args.arg_keyfile.as_ref().map(PathBuf::from);
-    let entry_type = db_entry_type(&args);
+fn register(cmd: RegisterCommand) -> Result<operation::register::Params> {
+    let (common, entry_type, keyfile_opt) = match cmd.subcmd {
+        RegisterSubcommand::Keyfile(keyfile) => (keyfile.common, DbEntryType::Keyfile, Some(keyfile.keyfile)),
+        RegisterSubcommand::Passphrase(passphrase) => (passphrase.common, DbEntryType::Passphrase, None),
+    };
 
-    operation::register::register(
-        ctx,
-        operation::register::Params {
-            device_paths_or_uuids,
-            entry_type,
-            keyfile,
-            name,
-        },
-    )
-}
-
-fn perform_operation(args: &Args) -> Result<()> {
-    let db_type_opt: Option<DbType> = args.arg_db_type.as_ref().map(|s| match s.as_ref() {
-        "operation" => DbType::Operation,
-        "backup" => DbType::Backup,
-        _ => panic!("Unrecognised DB type"),
-    });
-    let db_path = db_path(args)?;
-    let ctx = MainContext::new(db_path);
-
-    match args {
-        _ if args.cmd_enroll => enroll(args, &ctx),
-        _ if args.cmd_init => operation::newdb::newdb(&ctx, operation::newdb::Params(db_type_opt.expect("db type"))),
-        _ if args.cmd_list => operation::list::list(
-            &ctx,
-            operation::list::Params {
-                only_available: !args.flag_all,
-            },
-        ),
-        _ if args.cmd_open => open(args, &ctx),
-        _ if args.cmd_register => register(args, &ctx),
-        _ => panic!("BUG: Unknown command!"),
-    }
+    Ok(operation::register::Params {
+        device_paths_or_uuids: common.device_or_uuid,
+        entry_type,
+        keyfile: keyfile_opt,
+        name: common.name,
+    })
 }
 
 fn run_peroxs() -> i32 {
@@ -306,20 +373,22 @@ fn run_peroxs() -> i32 {
         MainContext::trace_on();
     }
 
-    let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.argv(env::args().into_iter()).deserialize())
-        .unwrap_or_else(|e| e.exit());
+    let opts: Opts = Opts::parse();
+    let ctx = MainContext::new(opts.global.database);
 
-    if args.flag_version {
-        println!("peroxs {}", VERSION);
-        0
-    } else {
-        match perform_operation(&args) {
-            Ok(_) => 0,
-            Err(e) => {
-                println!("ERROR: {}", e);
-                1
-            }
+    let res = match opts.subcmd {
+        TopSubcommand::Enroll(cmd) => enroll(cmd).and_then(|p| operation::enroll::enroll(&ctx, p)),
+        TopSubcommand::Init(cmd) => newdb(cmd).and_then(|p| operation::newdb::newdb(&ctx, p)),
+        TopSubcommand::List(cmd) => list(cmd).and_then(|p| operation::list::list(&ctx, p)),
+        TopSubcommand::Open(cmd) => open(cmd).and_then(|p| operation::open::open(&ctx, p)),
+        TopSubcommand::Register(cmd) => register(cmd).and_then(|p| operation::register::register(&ctx, p)),
+    };
+
+    match res {
+        Ok(_) => 0,
+        Err(e) => {
+            println!("ERROR: {}", e);
+            1
         }
     }
 }

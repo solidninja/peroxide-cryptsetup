@@ -9,6 +9,7 @@ use std::result;
 use uuid::Uuid;
 
 use serde_json;
+use std::str::FromStr;
 
 /// Current database version (used for future forward-compatibility)
 pub const DB_VERSION: u16 = 1;
@@ -50,6 +51,18 @@ impl fmt::Display for Error {
 pub enum DbType {
     Operation,
     Backup,
+}
+
+impl FromStr for DbType {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_ref() {
+            "operation" => Ok(DbType::Operation),
+            "backup" => Ok(DbType::Backup),
+            other => Err(format!("Invalid DbType '{}'", other)),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

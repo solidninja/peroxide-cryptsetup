@@ -7,7 +7,7 @@ keywords = ["cli", "cryptsetup", "luks"]
 license = "GPL-3.0"
 name = "peroxide-cryptsetup"
 readme = "README.md"
-version = "0.2.1"
+version = "0.3.0-alpha.1"
 edition = "2018"
 
 [badges]
@@ -19,8 +19,8 @@ name = "peroxs"
 test = false
 
 [dependencies]
+clap = "3.0.0-beta.2"
 cryptsetup-rs = "0.3.0-beta1"
-docopt = "1.1.0"
 env_logger = "0.7.1"
 errno = "0.2.5"
 libc = "0.2.71"
