@@ -402,8 +402,8 @@ impl DeviceOps for MainContext {
             let new_key = prompt_new_key(self, first_entry)?;
 
             entries_with_path.try_mapped_ref(|(disk_path, _)| {
-                (*disk_path)
-                    .luks_add_key(params.iteration_ms as usize, &new_key, &prev_key)
+                (*disk_path) // FIXME luks2
+                    .luks1_add_key(params.iteration_ms as usize, &new_key, &prev_key)
                     .map_err::<Error, _>(From::from)
             })?
         };

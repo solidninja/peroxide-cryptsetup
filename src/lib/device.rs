@@ -55,7 +55,7 @@ pub trait LuksVolumeOps {
     fn luks_activate(&self, name: &str, key: &SecStr) -> Result<Keyslot>;
 
     /// Add new key to LUKS device (given another key)
-    fn luks_add_key(&self, iteration_ms: usize, new_key: &SecStr, prev_key: &SecStr) -> Result<Keyslot>;
+    fn luks1_add_key(&self, iteration_ms: usize, new_key: &SecStr, prev_key: &SecStr) -> Result<Keyslot>;
 
     /// Format a new LUKS1 device with the given key
     fn luks1_format_with_key(
@@ -92,11 +92,14 @@ pub trait LuksVolumeOps {
 
 impl<P: AsRef<Path>> LuksVolumeOps for P {
     fn luks_activate(&self, name: &str, key: &SecStr) -> Result<Keyslot> {
-        let mut device = cryptsetup_rs::open(self)?.luks1()?;
-        device.activate(name, key.unsecure()).map_err(From::from)
+        let keyslot = cryptsetup_rs::open(self)?.luks()?.either(
+            |mut luks1| luks1.activate(name, key.unsecure()),
+            |mut luks2| luks2.activate(name, key.unsecure()),
+        )?;
+        Ok(keyslot)
     }
 
-    fn luks_add_key(&self, iteration_ms: usize, new_key: &SecStr, prev_key: &SecStr) -> Result<Keyslot> {
+    fn luks1_add_key(&self, iteration_ms: usize, new_key: &SecStr, prev_key: &SecStr) -> Result<Keyslot> {
         let mut device = cryptsetup_rs::open(self)?.luks1()?;
         device.set_iteration_time(iteration_ms as u64);
         device
