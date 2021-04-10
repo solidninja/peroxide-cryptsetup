@@ -58,9 +58,53 @@ For more information on the values of `--cipher`, `--hash` and `--key-bits` see 
 
 ### Full usage
 
-_verbatim from [peroxs.rs](src/bin/peroxs.rs)_
+(Copied from the clap-generated usage):
 
 ```
+USAGE:
+    peroxs [OPTIONS] <SUBCOMMAND>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -d, --database <database>    The database to use [default: peroxs-db.json] [aliases: db]
+
+SUBCOMMANDS:
+    enroll      Enroll a new or existing LUKS disk(s) in the database (adding a new keyslot)
+    help        Prints this message or the help of the given subcommand(s)
+    init        Initialize a new peroxide-db database
+    list        List disks enrolled in a database
+    open        Open enrolled LUKS disk(s)
+    register    Register an existing entry in the database (without adding a new keyslot)
+```
+
+#### `enroll`
+
+```
+peroxs-enroll 
+Enroll a new or existing LUKS disk(s) in the database (adding a new keyslot)
+
+USAGE:
+    peroxs enroll [OPTIONS] <SUBCOMMAND>
+
+FLAGS:
+    -h, --help    Prints help information
+
+OPTIONS:
+    -d, --database <database>    The database to use [default: peroxs-db.json] [aliases: db]
+
+SUBCOMMANDS:
+    help          Prints this message or the help of the given subcommand(s)
+    keyfile       Enroll using a keyfile
+    passphrase    Enroll using a passphrase
+    yubikey       Enroll using a Yubikey token
+```
+
+
+
+
 Usage:
     peroxs enroll keyfile <keyfile> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]
     peroxs enroll keyfile <keyfile> new --cipher=<cipher> --hash=<hash> --key-bits=<key-bits> <device-or-uuid>... --iteration-ms=<iteration-ms> [--backup-db=<backup-db>] [--name=<name>] [at <db>]

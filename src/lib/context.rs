@@ -201,6 +201,12 @@ pub trait DeviceOps {
         paths: Vec1<P>,
         name_override: Option<String>,
     ) -> Result<Vec1<DeviceMapperName>>;
+
+    /// Check if device is active already (by using the name in the entry or the name override)
+    fn is_active(entry: &DbEntry, name_override: Option<String>) -> bool;
+
+    /// Check if device is present
+    fn is_present(entry: &DbEntry) -> bool;
 }
 
 impl DeviceOps for MainContext {
@@ -232,7 +238,7 @@ impl DeviceOps for MainContext {
             .or(entry.volume_id().name.clone())
             .unwrap_or_else(|| format!("uuid_{}", entry.volume_id().uuid()));
 
-        if Disks::is_device_mapped(name.as_str()) {
+        if Disks::is_device_active(name.as_str()) {
             return Err(Error::DeviceAlreadyActivated(name));
         }
 
@@ -404,6 +410,23 @@ impl DeviceOps for MainContext {
                 .collect::<Result<Vec<DeviceMapperName>>>()?;
 
             Ok(Vec1::try_from_vec(res).expect("non-empty vec"))
+        }
+    }
+
+    fn is_active(entry: &DbEntry, name_override: Option<String>) -> bool {
+        let name_opt = entry.volume_id().name.to_owned().or(name_override);
+        if let Some(name) = name_opt {
+            Disks::is_device_active(&name)
+        } else {
+            false
+        }
+    }
+
+    fn is_present(entry: &DbEntry) -> bool {
+        if let Ok(_) = Disks::disk_uuid_path(entry.uuid()) {
+            true
+        } else {
+            false
         }
     }
 }
