@@ -7,7 +7,7 @@ use std::result;
 
 use cryptsetup_rs;
 pub use cryptsetup_rs::Keyslot;
-use cryptsetup_rs::{CryptDevice, Luks2CryptDevice, LuksCryptDevice};
+use cryptsetup_rs::{CryptDevice, Luks2CryptDevice, Luks2Token, Luks2TokenId, LuksCryptDevice};
 
 use cryptsetup_rs::api::crypt_pbkdf_algo_type;
 use errno;
@@ -48,8 +48,12 @@ impl From<io::Error> for Error {
 // this assumes a udev-like /dev layout
 const DISK_BY_UUID: &'static str = "/dev/disk/by-uuid";
 const DEV_MAPPER: &'static str = "/dev/mapper";
+const TOKEN_NAME: &'static str = "peroxide";
 
 const UUID_LENGTH: usize = 36;
+
+// always use the argon2id variant
+const LUKS2_PBKDF_TYPE: crypt_pbkdf_algo_type = crypt_pbkdf_algo_type::argon2id;
 
 #[derive(Debug, Clone)]
 pub enum FormatContainerParams {
@@ -59,6 +63,7 @@ pub enum FormatContainerParams {
         cipher_mode: String,
         hash: String,
         mk_bits: usize,
+        uuid: Option<uuid::Uuid>,
     },
     Luks2 {
         cipher: String,
@@ -72,6 +77,19 @@ pub enum FormatContainerParams {
         sector_size: Option<u32>,
         data_alignment: Option<u32>,
         save_label_in_header: bool,
+        uuid: Option<uuid::Uuid>,
+        label: Option<String>,
+        token_id: Option<Luks2TokenId>,
+    },
+}
+
+pub enum FormatResult {
+    Luks1 {
+        keyslot: Keyslot,
+    },
+    Luks2 {
+        keyslot: Keyslot,
+        token_id: Option<Luks2TokenId>,
     },
 }
 
@@ -88,34 +106,8 @@ pub trait LuksVolumeOps {
         params: &FormatContainerParams,
     ) -> Result<Keyslot>;
 
-    /// Format a new LUKS1 device with the given key
-    fn luks1_format_with_key(
-        &self,
-        iteration_ms: usize,
-        cipher: &str,
-        cipher_mode: &str,
-        hash: &str,
-        mk_bits: usize,
-        uuid_opt: Option<&Uuid>,
-        key: &SecStr,
-    ) -> Result<Keyslot>;
-
-    fn luks2_format_with_key(
-        &self,
-        cipher: &str,
-        cipher_mode: &str,
-        mk_bits: usize,
-        hash: &str,
-        time_ms: u32,
-        iterations: u32,
-        max_memory_kb: u32,
-        parallel_threads: u32,
-        sector_size: Option<u32>,
-        data_alignment: Option<u32>,
-        uuid_opt: Option<&Uuid>,
-        label_opt: Option<&str>,
-        key: &SecStr,
-    ) -> Result<Keyslot>;
+    // Format a new LUKS device with the given key
+    fn luks_format_with_key(&self, key: &SecStr, params: &FormatContainerParams) -> Result<FormatResult>;
 
     /// Read the UUID of an existing LUKS1 device
     fn luks_uuid(&self) -> Result<Uuid>;
@@ -148,82 +140,112 @@ impl<P: AsRef<Path>> LuksVolumeOps for P {
             |mut luks2| {
                 luks2.set_iteration_time(iteration_ms as u64);
 
-                match params {
+                let token_id = match params {
                     FormatContainerParams::Luks2 {
                         hash,
                         time_ms,
                         iterations,
                         max_memory_kb,
                         parallel_threads,
+                        token_id,
                         ..
                     } => {
                         // always use argon2id
                         luks2.set_pbkdf_params(
-                            crypt_pbkdf_algo_type::argon2id,
+                            LUKS2_PBKDF_TYPE,
                             hash,
                             *time_ms,
                             *iterations,
                             *max_memory_kb,
                             *parallel_threads,
-                        )?
+                        )?;
+                        token_id
                     }
-                    _ => (),
+                    _ => &None,
+                };
+
+                let keyslot = luks2.add_keyslot(new_key.unsecure(), Some(prev_key.unsecure()), None)?;
+                if let Some(token_id) = token_id {
+                    luks2.assign_token_to_keyslot(*token_id, Some(keyslot))?;
                 }
 
-                luks2
-                    .add_keyslot(new_key.unsecure(), Some(prev_key.unsecure()), None)
-                    .map_err(From::from)
+                Ok(keyslot)
             },
         )
     }
 
-    fn luks1_format_with_key(
-        &self,
-        iteration_ms: usize,
-        cipher: &str,
-        cipher_mode: &str,
-        hash: &str,
-        mk_bits: usize,
-        uuid_opt: Option<&Uuid>,
-        key: &SecStr,
-    ) -> Result<Keyslot> {
-        let mut device = cryptsetup_rs::format(self)?.iteration_time(iteration_ms as u64).luks1(
-            cipher,
-            cipher_mode,
-            hash,
-            mk_bits,
-            uuid_opt,
-        )?;
-        device.set_iteration_time(iteration_ms as u64);
-        device.add_keyslot(key.unsecure(), None, None).map_err(From::from)
-    }
+    fn luks_format_with_key(&self, key: &SecStr, params: &FormatContainerParams) -> Result<FormatResult> {
+        match params {
+            FormatContainerParams::Luks1 {
+                iteration_ms,
+                cipher,
+                cipher_mode,
+                hash,
+                mk_bits,
+                uuid,
+            } => {
+                let mut device = cryptsetup_rs::format(self)?
+                    .iteration_time(*iteration_ms as u64)
+                    .luks1(cipher, cipher_mode, hash, *mk_bits, uuid.as_ref())?;
+                device.set_iteration_time(*iteration_ms as u64);
+                let keyslot = device.add_keyslot(key.unsecure(), None, None)?;
 
-    fn luks2_format_with_key(
-        &self,
-        cipher: &str,
-        cipher_mode: &str,
-        mk_bits: usize,
-        hash: &str,
-        time_ms: u32,
-        iterations: u32,
-        max_memory_kb: u32,
-        parallel_threads: u32,
-        sector_size: Option<u32>,
-        data_alignment: Option<u32>,
-        uuid_opt: Option<&Uuid>,
-        label_opt: Option<&str>,
-        key: &SecStr,
-    ) -> Result<u8> {
-        let mut format_builder = cryptsetup_rs::format(self)?
-            .luks2(cipher, cipher_mode, mk_bits, uuid_opt, data_alignment, sector_size)
-            .argon2id(hash, time_ms, iterations, max_memory_kb, parallel_threads);
+                Ok(FormatResult::Luks1 { keyslot })
+            }
+            FormatContainerParams::Luks2 {
+                cipher,
+                cipher_mode,
+                mk_bits,
+                hash,
+                time_ms,
+                iterations,
+                max_memory_kb,
+                parallel_threads,
+                sector_size,
+                data_alignment,
+                save_label_in_header: _save_label_in_header,
+                uuid,
+                label,
+                token_id,
+            } => {
+                let mut format_builder = cryptsetup_rs::format(self)?
+                    .luks2(
+                        cipher,
+                        cipher_mode,
+                        *mk_bits,
+                        uuid.as_ref(),
+                        *data_alignment,
+                        *sector_size,
+                    )
+                    .argon2id(hash, *time_ms, *iterations, *max_memory_kb, *parallel_threads);
 
-        if let Some(label) = label_opt {
-            format_builder = format_builder.label(label);
+                if let Some(label) = label {
+                    format_builder = format_builder.label(label);
+                }
+
+                let mut device = format_builder.start()?;
+                let key = device.add_keyslot(key.unsecure(), None, None)?;
+
+                // always add a luks 2 token to the keyslot
+                let token = Luks2Token {
+                    type_: TOKEN_NAME.to_string(),
+                    keyslots: vec![key.to_string()],
+                    other: serde_json::Map::new(),
+                };
+
+                let tok = if let Some(token_id) = token_id {
+                    device.add_token_with_id(&token, *token_id)?;
+                    *token_id
+                } else {
+                    device.add_token(&token)?
+                };
+
+                Ok(FormatResult::Luks2 {
+                    keyslot: key,
+                    token_id: Some(tok),
+                })
+            }
         }
-
-        let mut device = format_builder.start()?;
-        device.add_keyslot(key.unsecure(), None, None).map_err(From::from)
     }
 
     fn luks_uuid(&self) -> Result<Uuid> {

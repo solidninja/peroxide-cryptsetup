@@ -11,7 +11,7 @@ use secstr::SecStr;
 use vec1::Vec1;
 
 use crate::db::{DbEntry, Error as DbError, PeroxideDb, VolumeId, YubikeyEntryType, YubikeySlot};
-use crate::device::{Disks, Error as DeviceError, LuksVolumeOps};
+use crate::device::{Disks, Error as DeviceError, FormatResult, LuksVolumeOps};
 use crate::input::{get_key_for, BackupPrompt, Error as InputError, KeyInputConfig};
 use uuid::Uuid;
 
@@ -108,64 +108,32 @@ fn entry_from(volume_id: VolumeId, params: EntryParams) -> DbEntry {
 
 fn format_container<P: AsRef<Path>>(
     disk_path: &P,
-    entry: &DbEntry,
-    params: &FormatContainerParams,
+    entry: &mut DbEntry,
+    params: &mut FormatContainerParams,
     key: &SecStr,
 ) -> Result<u8> {
     match params {
-        FormatContainerParams::Luks1 {
-            iteration_ms,
-            cipher,
-            cipher_mode,
-            hash,
-            mk_bits,
-        } => disk_path
-            .luks1_format_with_key(
-                *iteration_ms as usize,
-                &cipher,
-                &cipher_mode,
-                &hash,
-                *mk_bits,
-                Some(&entry.uuid()),
-                key,
-            )
-            .map_err(From::from),
+        FormatContainerParams::Luks1 { uuid, .. } => {
+            *uuid = Some(entry.uuid().to_owned());
+        }
         FormatContainerParams::Luks2 {
-            cipher,
-            cipher_mode,
-            mk_bits,
-            hash,
-            time_ms,
-            iterations,
-            max_memory_kb,
-            parallel_threads,
-            sector_size,
-            data_alignment,
+            uuid,
+            label,
             save_label_in_header,
+            ..
         } => {
-            let label_opt = if *save_label_in_header {
-                entry.volume_id().name.as_ref().map(|s| s.as_ref())
-            } else {
-                None
-            };
+            *uuid = Some(entry.uuid().to_owned());
+            if *save_label_in_header {
+                *label = entry.volume_id().name.as_ref().map(|s| s.to_owned());
+            }
+        }
+    };
 
-            disk_path
-                .luks2_format_with_key(
-                    cipher,
-                    cipher_mode,
-                    *mk_bits,
-                    hash,
-                    *time_ms,
-                    *iterations,
-                    *max_memory_kb,
-                    *parallel_threads,
-                    *sector_size,
-                    *data_alignment,
-                    Some(entry.uuid()),
-                    label_opt,
-                    key,
-                )
-                .map_err(From::from)
+    match disk_path.luks_format_with_key(key, params)? {
+        FormatResult::Luks1 { keyslot } => Ok(keyslot),
+        FormatResult::Luks2 { keyslot, token_id } => {
+            entry.volume_id_mut().luks2_token_id = token_id;
+            Ok(keyslot)
         }
     }
 }
@@ -366,15 +334,15 @@ impl DeviceOps for MainContext {
         // 2. prompt for old/new key(s)
         // 3. add the entry to the db
 
-        let entries_with_path =
+        let mut entries_with_path =
             paths_with_volume_ids.mapped(|(p, volume_id)| (p, entry_from(volume_id, params.entry.clone())));
         // TODO: first entry is used for all the enrollment, this matters especially for Yubikey UUID handling as it's order dependent
         let first_entry = &entries_with_path.first().1;
 
         let _keyslots = if params.format {
             let new_key = prompt_new_key(self, first_entry)?;
-            entries_with_path.try_mapped_ref(|(disk_path, entry)| {
-                format_container(disk_path, &entry, &params.format_params, &new_key)
+            entries_with_path.try_mapped_mut(|(disk_path, entry)| {
+                format_container(disk_path, entry, &mut params.format_params.clone(), &new_key)
             })?
         } else {
             let prev_key = prompt_old_key(self, backup_db, first_entry.volume_id())?;
@@ -389,7 +357,6 @@ impl DeviceOps for MainContext {
 
         let entries = entries_with_path.mapped(|e| e.1);
         db.entries.extend_from_slice(entries.as_slice());
-        // todo: should we save here too?
         self.save_db(&db)?;
 
         Ok(entries)

@@ -271,6 +271,7 @@ fn format_params(params: &LuksFormatParams) -> FormatContainerParams {
             cipher_mode,
             hash,
             mk_bits: key_bits,
+            uuid: None,
         }
     } else {
         FormatContainerParams::Luks2 {
@@ -285,6 +286,9 @@ fn format_params(params: &LuksFormatParams) -> FormatContainerParams {
             sector_size: None,
             data_alignment: None,
             save_label_in_header: params.save_label_in_header,
+            uuid: None,
+            label: None,
+            token_id: None,
         }
     }
 }

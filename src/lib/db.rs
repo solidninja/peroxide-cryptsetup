@@ -117,6 +117,10 @@ pub struct VolumeId {
     // Note this is necessary to preserve JSON compatibility with the pre-serde version of peroxide-cryptsetup
     // that had its own serialiser for UUID types (and this workaround is easier than writing a custom Serde serialiser)
     id: VolumeUuid,
+    // LUKS 2 token id
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub(crate) luks2_token_id: Option<i32>,
 }
 
 impl VolumeId {
@@ -124,6 +128,7 @@ impl VolumeId {
         VolumeId {
             name,
             id: VolumeUuid { uuid: Uuid::new_v4() },
+            luks2_token_id: None,
         }
     }
 
@@ -131,6 +136,7 @@ impl VolumeId {
         VolumeId {
             name,
             id: VolumeUuid { uuid },
+            luks2_token_id: None,
         }
     }
 
@@ -204,6 +210,14 @@ impl DbEntry {
     pub fn uuid(&self) -> &Uuid {
         &self.volume_id().uuid()
     }
+
+    pub fn volume_id_mut(&mut self) -> &mut VolumeId {
+        match *self {
+            DbEntry::KeyfileEntry { ref mut volume_id, .. } => volume_id,
+            DbEntry::PassphraseEntry { ref mut volume_id, .. } => volume_id,
+            DbEntry::YubikeyEntry { ref mut volume_id, .. } => volume_id,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -258,6 +272,21 @@ pub mod tests {
         };
         expect!(serde_json::to_string(&entry)).to(be_ok().value(
             r#"{"PassphraseEntry":{"volume_id":{"name":null,"id":{"uuid":"00000000-0000-0000-0000-000000000000"}}}}"#
+                .to_string(),
+        ));
+    }
+
+    #[test]
+    fn test_serialize_passphrase_entry_luks2_token_id() {
+        let volume_id = {
+            let mut id = VolumeId::of(None, Uuid::nil());
+            id.luks2_token_id = Some(42);
+            id
+        };
+
+        let entry = DbEntry::PassphraseEntry { volume_id };
+        expect!(serde_json::to_string(&entry)).to(be_ok().value(
+            r#"{"PassphraseEntry":{"volume_id":{"name":null,"id":{"uuid":"00000000-0000-0000-0000-000000000000"},"luks2_token_id":42}}}"#
                 .to_string(),
         ));
     }
