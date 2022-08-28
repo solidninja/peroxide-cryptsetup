@@ -434,7 +434,7 @@ dependencies = [
 
 [[package]]
 name = "libykpers-sys"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "libc",
  "pkg-config",
@@ -475,7 +475,7 @@ checksum = "9ff7415e9ae3fff1225851df9e0d9e4e5479f947619774677a63572e55e80eff"
 
 [[package]]
 name = "peroxide-cryptsetup"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "clap",
  "clap_derive",
@@ -935,7 +935,7 @@ dependencies = [
 
 [[package]]
 name = "ttypass"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "libc",
  "termios",
@@ -1031,7 +1031,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "ykpers-rs"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "env_logger",
  "errno",
