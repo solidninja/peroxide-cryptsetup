@@ -444,7 +444,7 @@ extern "C" {
     pub fn yk_strerror(errno: c_int) -> *const c_char;
     pub fn yk_usb_strerror() -> *const c_char;
 
-// ignore yk_endian_swap_16
+    // ignore yk_endian_swap_16
 }
 
 pub fn yk_errno() -> c_int {

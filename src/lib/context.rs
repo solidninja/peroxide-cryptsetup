@@ -2,18 +2,17 @@ use std::path::{Path, PathBuf};
 use std::result;
 use std::time::Duration;
 
-use cryptsetup_rs;
-
-pub use crate::device::FormatContainerParams;
-pub use cryptsetup_rs::Luks1CryptDeviceHandle as Luks1Device;
-
 use secstr::SecStr;
+use uuid::Uuid;
 use vec1::Vec1;
 
+use cryptsetup_rs;
+pub use cryptsetup_rs::Luks1CryptDeviceHandle as Luks1Device;
+
 use crate::db::{DbEntry, Error as DbError, PeroxideDb, VolumeId, YubikeyEntryType, YubikeySlot};
+pub use crate::device::FormatContainerParams;
 use crate::device::{Disks, Error as DeviceError, FormatResult, LuksVolumeOps};
 use crate::input::{get_key_for, BackupPrompt, Error as InputError, KeyInputConfig};
-use uuid::Uuid;
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -411,19 +410,28 @@ impl DeviceOps for MainContext {
 
 pub trait DatabaseOps {
     /// Check if an entry exists by uuid
-    fn entry_exists(&self, uuid: &uuid::Uuid) -> bool;
+    fn entry_exists(&self, uuid: &Uuid) -> bool;
 
     /// Find an entry by uuid
-    fn find_entry(&self, uuid: &uuid::Uuid) -> Option<&DbEntry>;
+    fn find_entry(&self, uuid: &Uuid) -> Option<&DbEntry>;
+
+    /// Find an entry by name
+    fn find_entry_by_name(&self, name: &str) -> Option<&DbEntry>;
 }
 
 impl DatabaseOps for PeroxideDb {
-    fn entry_exists(&self, uuid: &uuid::Uuid) -> bool {
+    fn entry_exists(&self, uuid: &Uuid) -> bool {
         self.find_entry(uuid).is_some()
     }
 
-    fn find_entry(&self, uuid: &uuid::Uuid) -> Option<&DbEntry> {
-        self.entries.iter().find(|e| e.volume_id().uuid() == uuid)
+    fn find_entry(&self, uuid: &Uuid) -> Option<&DbEntry> {
+        self.entries.iter().find(|&e| e.volume_id().uuid() == uuid)
+    }
+
+    fn find_entry_by_name(&self, name: &str) -> Option<&DbEntry> {
+        self.entries
+            .iter()
+            .find(|&e| matches!(&e.volume_id().name, Some(n) if n == name))
     }
 }
 

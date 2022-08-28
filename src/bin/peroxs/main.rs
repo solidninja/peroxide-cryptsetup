@@ -6,8 +6,10 @@ extern crate log;
 #[macro_use]
 extern crate prettytable;
 
+use std::convert::Infallible;
 use std::path::PathBuf;
 use std::process::exit;
+use std::str::FromStr;
 
 use clap::{Parser, ValueHint};
 use clap_derive::Parser;
@@ -201,7 +203,7 @@ struct OpenCommand {
     )]
     name: Option<String>,
     #[clap(long_help ="The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
-    device_or_uuid: Vec<PathOrUuid>,
+    device_or_uuid: Vec<DiskReference>,
 }
 
 #[derive(Parser, Debug)]
@@ -238,6 +240,17 @@ struct RegisterKeyfile {
 struct RegisterPassphrase {
     #[clap(flatten)]
     common: RegisterCommon,
+}
+
+#[derive(Debug)]
+pub struct DiskReference(String);
+
+impl FromStr for DiskReference {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(DiskReference(s.to_string()))
+    }
 }
 
 fn cipher_mode(params: &LuksFormatParams) -> (String, String) {
@@ -341,7 +354,7 @@ fn newdb(cmd: InitCommand) -> Result<operation::newdb::Params> {
 
 fn open(cmd: OpenCommand) -> Result<operation::open::Params> {
     Ok(operation::open::Params {
-        device_paths_or_uuids: cmd.device_or_uuid,
+        disk_references: cmd.device_or_uuid,
         name: cmd.name,
     })
 }

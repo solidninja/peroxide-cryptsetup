@@ -1,12 +1,14 @@
-use peroxide_cryptsetup::context::{Context, DeviceOps, PeroxideDbOps};
+use peroxide_cryptsetup::context::{Context, DatabaseOps, DeviceOps, PeroxideDbOps};
+use std::str::FromStr;
 
 use crate::operation::{Disks, OperationError as Error, PathOrUuid, Result};
+use crate::DiskReference;
 use vec1::Vec1;
 
 #[derive(Debug)]
 pub struct Params {
     /// List of device paths or UUIDs corresponding to the devices we want to open
-    pub device_paths_or_uuids: Vec<PathOrUuid>,
+    pub disk_references: Vec<DiskReference>,
     /// Name override (if a single device is present)
     pub name: Option<String>,
 }
@@ -15,11 +17,16 @@ pub fn open<C: Context + DeviceOps>(ctx: &C, params: Params) -> Result<()> {
     let db = ctx.open_db()?;
 
     let paths = params
-        .device_paths_or_uuids
+        .disk_references
         .into_iter()
-        .map(|path_or| match path_or {
-            PathOrUuid::Uuid(uuid) => Ok(Disks::disk_uuid_path(&uuid)?),
-            PathOrUuid::Path(path) => Ok(path),
+        .map(|disk_ref| {
+            db.find_entry_by_name(&disk_ref.0)
+                .map(|e| Ok(PathOrUuid::Uuid(e.volume_id().uuid().to_owned())))
+                .unwrap_or_else(|| PathOrUuid::from_str(&disk_ref.0))
+                .and_then(|path_or| match path_or {
+                    PathOrUuid::Uuid(uuid) => Ok(Disks::disk_uuid_path(&uuid)?),
+                    PathOrUuid::Path(path) => Ok(path),
+                })
         })
         .collect::<Result<Vec<_>>>()?;
 
