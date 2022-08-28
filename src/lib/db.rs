@@ -5,11 +5,11 @@ use std::io;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::result;
-
-use uuid::Uuid;
+use std::str::FromStr;
 
 use serde_json;
-use std::str::FromStr;
+use snafu::{prelude::*, Backtrace, IntoError};
+use uuid::Uuid;
 
 /// Current database version (used for future forward-compatibility)
 pub const DB_VERSION: u16 = 1;
@@ -17,37 +17,37 @@ pub const DB_VERSION: u16 = 1;
 /// Default database name
 pub const PEROXIDE_DB_NAME: &'static str = "peroxs-db.json";
 
-#[derive(Debug)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    DatabaseNotFound(PathBuf),
-    IoError(PathBuf, io::Error),
-    SerialisationError(serde_json::Error),
+    #[snafu(display("Database not found at `{}`", path.display()))]
+    DatabaseNotFoundError { path: PathBuf, backtrace: Backtrace },
+    #[snafu(display("I/O error on `{}`", path.display()))]
+    IoError {
+        path: PathBuf,
+        source: io::Error,
+        backtrace: Backtrace,
+    },
+    #[snafu(display("JSON serialization error"))]
+    SerialisationError {
+        source: serde_json::Error,
+        backtrace: Backtrace,
+    },
 }
 
 pub type Result<T> = result::Result<T, Error>;
 
 impl<P: AsRef<Path>> From<(P, io::Error)> for Error {
     fn from(e: (P, io::Error)) -> Self {
-        if e.1.kind() == std::io::ErrorKind::NotFound {
-            Error::DatabaseNotFound(e.0.as_ref().to_path_buf())
+        if e.1.kind() == io::ErrorKind::NotFound {
+            DatabaseNotFoundSnafu {
+                path: e.0.as_ref().to_path_buf(),
+            }
+            .build()
         } else {
-            Error::IoError(e.0.as_ref().to_path_buf(), e.1)
-        }
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(e: serde_json::Error) -> Self {
-        Error::SerialisationError(e)
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::DatabaseNotFound(ref path) => write!(f, "Database not found at {}", path.display()),
-            Error::IoError(ref path, ref e) => write!(f, "I/O error [database={}, cause={}]", path.display(), e),
-            Error::SerialisationError(ref e) => write!(f, "Database serialisation error [cause={}]", e),
+            IoSnafu {
+                path: e.0.as_ref().to_path_buf(),
+            }
+            .into_error(e.1)
         }
     }
 }
@@ -179,7 +179,7 @@ impl PeroxideDb {
 
     /// Open a JSON-encoded database
     pub fn open<R: Read>(reader: R) -> Result<PeroxideDb> {
-        serde_json::de::from_reader(reader).map_err(From::from)
+        serde_json::de::from_reader(reader).context(SerialisationSnafu)
     }
 
     /// Open a JSON-encoded database at the specified path
@@ -189,7 +189,7 @@ impl PeroxideDb {
 
     /// Write a JSON-encoded database
     pub fn save<W: Write>(&self, writer: &mut W) -> Result<()> {
-        serde_json::to_writer(writer, self).map_err(From::from)
+        serde_json::to_writer(writer, self).context(SerialisationSnafu)
     }
 
     /// Write a JSON-encoded database to the specified path
@@ -222,14 +222,13 @@ impl DbEntry {
 
 #[cfg(test)]
 pub mod tests {
-
-    use super::*;
+    use std::path::PathBuf;
 
     use expectest::prelude::*;
-
     use serde_json;
-    use std::path::PathBuf;
     use uuid::Uuid;
+
+    use super::*;
 
     #[test]
     fn test_serialize_db_type() {

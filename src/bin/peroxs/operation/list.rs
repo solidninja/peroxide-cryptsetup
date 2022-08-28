@@ -2,8 +2,9 @@ use peroxide_cryptsetup::context::{Context, PeroxideDbOps};
 use peroxide_cryptsetup::db::{DbEntry, YubikeyEntryType};
 use peroxide_cryptsetup::device::{Disks, DmSetupDeviceInfo};
 use prettytable::{format, Table};
+use snafu::prelude::*;
 
-use crate::operation::Result;
+use crate::operation::{ContextSnafu, DeviceSnafu, Result};
 
 #[derive(Debug)]
 pub struct Params {
@@ -12,9 +13,9 @@ pub struct Params {
 }
 
 pub fn list<C: Context>(ctx: &C, params: Params) -> Result<()> {
-    let db = ctx.open_db()?;
+    let db = ctx.open_db().context(ContextSnafu)?;
 
-    let active_mappings = Disks::scan_sysfs_for_active_crypt_devices()?;
+    let active_mappings = Disks::scan_sysfs_for_active_crypt_devices().context(DeviceSnafu)?;
 
     // sort entries by name, then by uuid
     let mut entries = db.entries.clone();

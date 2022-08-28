@@ -8,23 +8,31 @@ use std::result;
 
 use cryptsetup_rs;
 pub use cryptsetup_rs::Keyslot;
-use cryptsetup_rs::{luks_uuid, CryptDevice, Luks2CryptDevice, Luks2Token, Luks2TokenId, LuksCryptDevice};
-
-use cryptsetup_rs::api::crypt_pbkdf_algo_type;
+use cryptsetup_rs::{
+    api::crypt_pbkdf_algo_type, luks_uuid, CryptDevice, Luks2CryptDevice, Luks2Token, Luks2TokenId, LuksCryptDevice,
+};
 use errno;
 use secstr::SecStr;
+use snafu::{prelude::*, Backtrace, IntoError};
 use uuid::Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, Snafu)]
 pub enum Error {
     /// Error that originates from underlying cryptsetup library
-    CryptsetupError(errno::Errno),
+    #[snafu(display("Cryptsetup error code {underlying}"))]
+    CryptsetupError {
+        underlying: errno::Errno,
+        backtrace: Backtrace,
+    },
     /// Error that originates from trying to read a device
-    DeviceReadError(String),
+    #[snafu(display("Device read error: {message}"))]
+    DeviceReadError { message: String, backtrace: Backtrace },
     /// Error that originates from some other kind of IO
-    IOError(::std::io::Error),
+    #[snafu(display("Unknown I/O error"))]
+    IoError { source: io::Error, backtrace: Backtrace },
     /// Other error (unmatched)
-    Other(String),
+    #[snafu(display("Other error: {message}"))]
+    OtherError { message: String, backtrace: Backtrace },
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -32,17 +40,17 @@ pub type Result<T> = result::Result<T, Error>;
 impl From<cryptsetup_rs::Error> for Error {
     fn from(e: cryptsetup_rs::Error) -> Self {
         match e {
-            cryptsetup_rs::Error::BlkidError(be) => Error::DeviceReadError(format!("{:?}", be)),
-            cryptsetup_rs::Error::CryptsetupError(e) => Error::CryptsetupError(e),
-            cryptsetup_rs::Error::IOError(ie) => Error::IOError(ie),
-            other => Error::Other(other.to_string()),
+            cryptsetup_rs::Error::BlkidError(be) => DeviceReadSnafu {
+                message: format!("{:?}", be),
+            }
+            .build(),
+            cryptsetup_rs::Error::CryptsetupError(e) => CryptsetupSnafu { underlying: e }.build(),
+            cryptsetup_rs::Error::IOError(ie) => IoSnafu.into_error(ie),
+            other => OtherSnafu {
+                message: other.to_string(),
+            }
+            .build(),
         }
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Self {
-        Error::IOError(e)
     }
 }
 
@@ -251,7 +259,7 @@ impl<P: AsRef<Path>> LuksVolumeOps for P {
     }
 
     fn luks_uuid(&self) -> Result<Uuid> {
-        cryptsetup_rs::luks_uuid(self.as_ref()).map_err(From::from)
+        luks_uuid(self.as_ref()).map_err(From::from)
     }
 }
 
@@ -291,7 +299,7 @@ impl Disks {
                     })
                     .collect()
             })
-            .map_err(From::from)
+            .context(IoSnafu)
     }
 
     /// Convert a UUID into a path under `/dev/disk/by-uuid/` if the disk with that UUID exists
@@ -310,7 +318,7 @@ impl Disks {
                     ))
                 }
             })
-            .map_err(From::from)
+            .context(IoSnafu)
     }
 
     /// Test whether a device name is in use already (i.e. it is actively mapped)
@@ -326,7 +334,8 @@ impl Disks {
     // todo: consider adding this to the context + higher-level convenience methods
     /// Scan sysfs for active devices and return a list of found devices
     pub fn scan_sysfs_for_active_crypt_devices() -> Result<Vec<DmSetupDeviceInfo>> {
-        let dm_paths = fs::read_dir(SYSFS_VIRTUAL_BLOCK_DIR)?
+        let dm_paths = fs::read_dir(SYSFS_VIRTUAL_BLOCK_DIR)
+            .context(IoSnafu)?
             .into_iter()
             .filter_map(|res| res.ok())
             .filter(|e| e.path().is_dir() && e.path().file_name().map_or(false, |c| c.as_bytes().starts_with(b"dm-")))
@@ -335,8 +344,9 @@ impl Disks {
 
         let mut res = vec![];
         for path in dm_paths {
-            let name = fs::read_to_string(path.join("dm/name"))?;
-            let slave_dirs = fs::read_dir(path.join("slaves"))?
+            let name = fs::read_to_string(path.join("dm/name")).context(IoSnafu)?;
+            let slave_dirs = fs::read_dir(path.join("slaves"))
+                .context(IoSnafu)?
                 .into_iter()
                 .filter_map(|res| res.ok())
                 .filter(|e| e.path().is_symlink())
@@ -344,10 +354,11 @@ impl Disks {
                 .collect::<Vec<_>>();
 
             if slave_dirs.len() == 1 {
-                let dev_name = fs::read_to_string(slave_dirs.get(0).unwrap().join("dev"))?;
+                let dev_name = fs::read_to_string(slave_dirs.get(0).unwrap().join("dev")).context(IoSnafu)?; // FIXME
                 let dev_path = PathBuf::from(DEVFS_BLOCK_DIR)
                     .join(dev_name.trim_end())
-                    .canonicalize()?;
+                    .canonicalize()
+                    .context(IoSnafu)?;
                 let luks_uuid = luks_uuid(&dev_path)?;
 
                 res.push(DmSetupDeviceInfo {
@@ -375,9 +386,9 @@ impl Disks {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use expectest::prelude::*;
+
+    use super::*;
 
     #[test]
     fn test_all_disks_uuids_must_return_something() {

@@ -3,7 +3,9 @@ use std::io;
 use std::io::Read;
 use std::path::PathBuf;
 
-use crate::input::{Error, InputName, KeyInput, Result, SecStr};
+use snafu::prelude::*;
+
+use crate::input::{FileNotFoundSnafu, InputName, IoSnafu, KeyInput, Result, SecStr};
 
 /// Parameters for key file input
 pub struct KeyfilePrompt {
@@ -14,18 +16,22 @@ pub struct KeyfilePrompt {
 impl KeyInput for KeyfilePrompt {
     fn get_key(&self, _name: &InputName, _is_new: bool) -> Result<SecStr> {
         if !self.key_file.exists() {
-            return Err(Error::FileNotFound(self.key_file.clone()));
+            return Err(FileNotFoundSnafu {
+                path: self.key_file.clone(),
+            }
+            .build());
         }
 
-        let mut file = File::open(&self.key_file)?;
-        let meta = file.metadata()?;
+        let mut file = File::open(&self.key_file).context(IoSnafu)?;
+        let meta = file.metadata().context(IoSnafu)?;
         let mut key = Vec::with_capacity(meta.len() as usize);
-        let read = file.read_to_end(&mut key)?;
+        let read = file.read_to_end(&mut key).context(IoSnafu)?;
         if read == 0 {
-            Err(From::from(io::Error::new(
+            Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
                 format!("Zero byte key file at {}", self.key_file.display()),
-            )))
+            ))
+            .context(IoSnafu)
         } else {
             Ok(SecStr::new(key))
         }
@@ -34,15 +40,14 @@ impl KeyInput for KeyfilePrompt {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use expectest::prelude::*;
-
     use std::fs::File;
     use std::io::Write;
     use std::str;
 
+    use expectest::prelude::*;
     use tempfile::{Builder, TempDir};
+
+    use super::*;
 
     fn _write_keyfile(s: &str) -> Result<(TempDir, PathBuf)> {
         let tmp_dir = Builder::new().prefix("keyfile_prompt").tempdir()?;

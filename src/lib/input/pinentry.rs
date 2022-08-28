@@ -1,7 +1,9 @@
-use pinentry_rs::{pinentry, Error as PinentryError};
 use std::time::Duration;
 
-use crate::input::{Error, InputName, KeyInput, Result, SecStr};
+use pinentry_rs::pinentry;
+use snafu::prelude::*;
+
+use crate::input::{InputName, KeyInput, PinentrySnafu, Result, SecStr};
 
 /// A prompt using pinentry for password entry
 pub struct PinentryPrompt {
@@ -33,14 +35,8 @@ impl KeyInput for PinentryPrompt {
             entry = entry.timeout(duration.as_secs() as u32)
         }
 
-        let pin = entry.pin(prompt)?;
+        let pin = entry.pin(prompt).context(PinentrySnafu {})?;
 
         Ok(pin)
-    }
-}
-
-impl From<PinentryError> for Error {
-    fn from(e: PinentryError) -> Self {
-        Error::PinentryError(e)
     }
 }

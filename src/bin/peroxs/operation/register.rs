@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 
+use snafu::prelude::*;
+
 use peroxide_cryptsetup::context::{Context, PeroxideDbOps};
 use peroxide_cryptsetup::db::{DbEntry, DbEntryType, VolumeId};
 use peroxide_cryptsetup::device::LuksVolumeOps;
 
-use crate::operation::{OperationError, PathOrUuid, Result};
+use crate::operation::{ContextSnafu, DeviceSnafu, PathOrUuid, Result, ValidationSnafu};
 
 #[derive(Debug)]
 pub struct Params {
@@ -19,7 +21,7 @@ pub struct Params {
 }
 
 pub fn register<C: Context>(ctx: &C, params: Params) -> Result<()> {
-    let mut db = ctx.open_db()?;
+    let mut db = ctx.open_db().context(ContextSnafu)?;
 
     let entries = params
         .device_paths_or_uuids
@@ -31,12 +33,12 @@ pub fn register<C: Context>(ctx: &C, params: Params) -> Result<()> {
         db.entries.push(entry);
     }
 
-    ctx.save_db(&db)?;
+    ctx.save_db(&db).context(ContextSnafu)?;
     Ok(())
 }
 
 fn to_entry(disk_path: PathBuf, params: &Params) -> Result<DbEntry> {
-    let uuid = disk_path.luks_uuid()?;
+    let uuid = disk_path.luks_uuid().context(DeviceSnafu)?;
     let volume_id = VolumeId::of(params.name.clone(), uuid);
 
     match params.entry_type {
@@ -45,9 +47,9 @@ fn to_entry(disk_path: PathBuf, params: &Params) -> Result<DbEntry> {
             key_file: params.keyfile.clone().expect("Expected keyfile to be passed in"),
         }),
         DbEntryType::Passphrase => Ok(DbEntry::PassphraseEntry { volume_id }),
-        other => Err(OperationError::ValidationFailed(format!(
-            "Entry type {:?} not supported in register operation",
-            other
-        ))),
+        other => Err(ValidationSnafu {
+            message: format!("Entry type {:?} not supported in register operation", other),
+        }
+        .build()),
     }
 }

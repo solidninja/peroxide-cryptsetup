@@ -31,6 +31,7 @@ secstr = "0.5.0"
 serde = "1.0.144"
 serde_derive = "1.0.144"
 serde_json = "1.0.85"
+snafu = { version = "0.7.1", features = ["backtraces"] }
 sodiumoxide = { version = "0.2.7", optional = true }
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 vec1 = "1.8.0"

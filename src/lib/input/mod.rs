@@ -1,77 +1,50 @@
-use std::error;
-use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::result;
 use std::time::Duration;
 
+#[cfg(feature = "pinentry")]
+use pinentry_rs::Error as PinEntryError;
 pub use secstr::SecStr;
 use uuid::Uuid;
 
+use snafu::{prelude::*, Backtrace, IntoError};
 #[cfg(feature = "yubikey")]
 use ykpers_rs::Error as YubikeyError;
-
-#[cfg(feature = "pinentry")]
-use pinentry_rs::Error as PinEntryError;
 
 use crate::context::{DatabaseOps, DeviceOps};
 use crate::db::{DbEntry, PeroxideDb, YubikeyEntryType, YubikeySlot};
 
-#[derive(Debug)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    FeatureNotAvailable,
-    FileNotFound(PathBuf),
-    IoError(io::Error),
-    UnknownCryptoError,
-    BackupDbEntryNotFound(Uuid),
-    BackupDbError(String),
+    #[snafu(display("The requested feature is not available"))]
+    FeatureNotAvailableError { backtrace: Backtrace },
+    #[snafu(display("The file was not found at {}", path.display()))]
+    FileNotFoundError { path: PathBuf, backtrace: Backtrace },
+    #[snafu(display("A generic I/O error occurred"))]
+    IoError { source: io::Error, backtrace: Backtrace },
+    #[snafu(display("Unexpected crypto error - yikes!"))]
+    UnknownCryptoError { backtrace: Backtrace },
+    #[snafu(display("Backup DB entry for {uuid} not found"))]
+    BackupDbEntryNotFoundError { uuid: Uuid, backtrace: Backtrace },
+    #[snafu(display("Backup DB error: {cause}"))]
+    BackupDbError { cause: String, backtrace: Backtrace },
     #[cfg(feature = "yubikey")]
-    YubikeyError(YubikeyError),
+    #[snafu(display("Yubikey error"))]
+    YubikeyError { source: YubikeyError, backtrace: Backtrace },
     #[cfg(feature = "pinentry")]
-    PinentryError(PinEntryError),
+    #[snafu(display("Pinentry error"))]
+    PinentryError {
+        source: PinEntryError,
+        backtrace: Backtrace,
+    },
 }
 
 pub type Result<T> = result::Result<T, Error>;
 
-impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Self {
-        Error::IoError(e)
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::FeatureNotAvailable => write!(f, "Feature is not available"),
-            Error::FileNotFound(ref path) => write!(f, "'{}' not found", path.display()),
-            Error::IoError(ref cause) => write!(f, "I/O error: {}", cause),
-            Error::UnknownCryptoError => write!(f, "Unknown crypto error - yikes!"),
-            Error::BackupDbError(ref cause) => write!(f, "Backup DB error: {}", cause),
-            Error::BackupDbEntryNotFound(ref uuid) => write!(f, "No backup DB entry found for UUID {}", uuid),
-            #[cfg(feature = "yubikey")]
-            Error::YubikeyError(ref cause) => write!(f, "Yubikey error: {:?}", cause), // TODO: formatting
-            #[cfg(feature = "pinentry")]
-            Error::PinentryError(ref cause) => write!(f, "Pinentry error: {:?}", cause), // TODO: formatting
-        }
-    }
-}
-
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Error::IoError(ref cause) => Some(cause),
-            #[cfg(feature = "yubikey")]
-            Error::YubikeyError(ref cause) => Some(cause),
-            #[cfg(feature = "pinentry")]
-            Error::PinentryError(ref cause) => Some(cause),
-            _ => None,
-        }
-    }
-}
-
 pub struct InputName {
     pub name: String,
-    pub uuid: Option<uuid::Uuid>,
+    pub uuid: Option<Uuid>,
     pub prompt_override: Option<String>,
 }
 
@@ -136,11 +109,14 @@ pub struct BackupPrompt<Ctx: DeviceOps> {
 impl<Ctx: DeviceOps> BackupPrompt<Ctx> {
     pub fn prompt_key(&self, uuid: &Uuid) -> Result<SecStr> {
         if let Some(entry) = self.db.find_entry(&uuid) {
-            self.ctx
-                .prompt_key(entry, None, false)
-                .map_err(|e| Error::BackupDbError(format!("Error during backup db operation: {:?}", e)))
+            self.ctx.prompt_key(entry, None, false).map_err(|e| {
+                BackupDbSnafu {
+                    cause: format!("Error during backup db operation: {:?}", e),
+                }
+                .build()
+            })
         } else {
-            Err(Error::BackupDbEntryNotFound(uuid.clone()))
+            Err(BackupDbEntryNotFoundSnafu { uuid: uuid.clone() }.build())
         }
     }
 }
@@ -186,9 +162,12 @@ fn passphrase(timeout: Option<Duration>) -> impl KeyInput {
 fn keyfile(key_path: &Path, working_dir: &Path) -> Result<impl KeyInput> {
     let not_found_handler = |e: io::Error| {
         if e.kind() == io::ErrorKind::NotFound {
-            Error::FileNotFound(key_path.to_path_buf())
+            FileNotFoundSnafu {
+                path: key_path.to_path_buf(),
+            }
+            .build()
         } else {
-            From::from(e)
+            IoSnafu.into_error(e)
         }
     };
 

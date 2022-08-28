@@ -1,13 +1,15 @@
-use std::convert::From;
-
+use snafu::prelude::*;
 use uuid::Uuid;
+
 use ykpers_rs::{
-    ChallengeResponse, ChallengeResponseParams, Error as YubikeyError, Yubikey, YubikeyDevice, SHA1_BLOCK_LENGTH,
-    SHA1_RESPONSE_LENGTH,
+    ChallengeResponse, ChallengeResponseParams, Yubikey, YubikeyDevice, SHA1_BLOCK_LENGTH, SHA1_RESPONSE_LENGTH,
 };
 
 use crate::db::{YubikeyEntryType, YubikeySlot};
-use crate::input::{Error, InputName, KeyInput, Result, SecStr};
+use crate::input::{InputName, KeyInput, Result, SecStr, YubikeySnafu};
+
+#[cfg(feature = "yubikey_hybrid")]
+use self::hybrid::read_hybrid_challenge_response;
 
 /// Parameters for Yubikey input
 pub struct YubikeyPrompt {
@@ -44,14 +46,8 @@ impl KeyInput for YubikeyPrompt {
     }
 }
 
-impl From<YubikeyError> for Error {
-    fn from(e: YubikeyError) -> Self {
-        Error::YubikeyError(e)
-    }
-}
-
 fn get_yubikey_device() -> Result<YubikeyDevice> {
-    let dev = YubikeyDevice::new()?;
+    let dev = YubikeyDevice::new().context(YubikeySnafu {})?;
     Ok(dev)
 }
 
@@ -63,7 +59,8 @@ fn read_challenge_response<Dev: ChallengeResponse>(
     let params = ChallengeResponseParams { slot, is_hmac: true };
     println!("Please interact with the Yubikey now...");
     let mut response = [0u8; SHA1_BLOCK_LENGTH];
-    dev.challenge_response(params, challenge.unsecure(), &mut response)?;
+    dev.challenge_response(params, challenge.unsecure(), &mut response)
+        .context(YubikeySnafu {})?;
     let key = SecStr::new(response[0..SHA1_RESPONSE_LENGTH].to_vec());
     for b in response.iter_mut() {
         *b = 0u8;
@@ -87,6 +84,7 @@ pub mod tests {
     use std::collections::HashMap;
 
     use expectest::prelude::*;
+
     use ykpers_rs::{ChallengeResponse, ChallengeResponseParams, Result, SHA1_BLOCK_LENGTH};
 
     use crate::db::YubikeySlot;
@@ -142,13 +140,13 @@ mod hybrid {
     use sodiumoxide::crypto::hash::sha256;
     use sodiumoxide::crypto::pwhash::scryptsalsa208sha256;
     use uuid::Uuid;
+
     use ykpers_rs::{ChallengeResponse, SHA1_BLOCK_LENGTH};
 
-    use super::read_challenge_response;
     use crate::db::YubikeySlot;
+    use crate::input::{Result, UnknownCryptoSnafu};
 
-    use crate::input::{Error, Result};
-
+    use super::read_challenge_response;
     use super::SecStr;
 
     // taken from crypto_pwhash_scrypt208sha256
@@ -170,7 +168,7 @@ mod hybrid {
             scryptsalsa208sha256::OpsLimit(PWHASH_OPSLIMIT),
             scryptsalsa208sha256::MemLimit(PWHASH_MEMLIMIT),
         )
-        .map_err(|_| Error::UnknownCryptoError)?;
+        .map_err(|_| UnknownCryptoSnafu.build())?;
         Ok(SecStr::new(derived_key))
     }
 
@@ -205,11 +203,11 @@ mod hybrid {
     #[cfg(test)]
     mod tests {
         use expectest::prelude::*;
+        use secstr::SecStr;
         use uuid::Uuid;
 
         use super::super::tests::MockChallengeResponse;
         use super::read_hybrid_challenge_response;
-        use secstr::SecStr;
 
         #[test]
         fn test_hybrid_key_derivation() {
@@ -247,6 +245,3 @@ mod hybrid {
         }
     }
 }
-
-#[cfg(feature = "yubikey_hybrid")]
-use self::hybrid::read_hybrid_challenge_response;

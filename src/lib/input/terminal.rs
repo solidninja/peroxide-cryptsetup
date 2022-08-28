@@ -1,7 +1,10 @@
 use std::time::Duration;
 
-use crate::input::{InputName, KeyInput, Result, SecStr};
+use snafu::prelude::*;
+
 use ttypass;
+
+use crate::input::{InputName, IoSnafu, KeyInput, Result, SecStr};
 
 /// A terminal prompt for a key (password)
 pub struct TerminalPrompt {
@@ -20,7 +23,7 @@ impl KeyInput for TerminalPrompt {
             }
         });
 
-        let buf = ttypass::read_password(&prompt, self.timeout.clone())?;
+        let buf = ttypass::read_password(&prompt, self.timeout.clone()).context(IoSnafu)?;
         Ok(SecStr::new(buf))
     }
 }

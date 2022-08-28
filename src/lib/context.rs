@@ -2,12 +2,12 @@ use std::path::{Path, PathBuf};
 use std::result;
 use std::time::Duration;
 
-use secstr::SecStr;
-use uuid::Uuid;
-use vec1::Vec1;
-
 use cryptsetup_rs;
 pub use cryptsetup_rs::Luks1CryptDeviceHandle as Luks1Device;
+use secstr::SecStr;
+use snafu::{prelude::*, Backtrace};
+use uuid::Uuid;
+use vec1::Vec1;
 
 use crate::db::{DbEntry, Error as DbError, PeroxideDb, VolumeId, YubikeyEntryType, YubikeySlot};
 pub use crate::device::FormatContainerParams;
@@ -18,37 +18,39 @@ pub type Result<T> = result::Result<T, Error>;
 
 pub type DeviceMapperName = String;
 
-#[derive(Debug)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    DatabaseError(DbError),
-    DeviceAlreadyActivated(String),
-    DeviceAlreadyFormatted(Uuid),
-    NotAllDisksAlreadyFormatted,
-    DiskIdDuplicatesFound,
-    EntryAlreadyExists(Uuid),
-    DiskEntryNotFound(Uuid),
-    DeviceError(DeviceError),
-    FeatureNotAvailable,
-    KeyInputError(InputError),
-    VolumeNotFound(VolumeId),
-}
-
-impl From<DbError> for Error {
-    fn from(e: DbError) -> Self {
-        Error::DatabaseError(e)
-    }
-}
-
-impl From<DeviceError> for Error {
-    fn from(e: DeviceError) -> Self {
-        Error::DeviceError(e)
-    }
-}
-
-impl From<InputError> for Error {
-    fn from(e: InputError) -> Self {
-        Error::KeyInputError(e)
-    }
+    #[snafu(display("Database error"))]
+    DatabaseError {
+        #[snafu(backtrace)]
+        source: DbError,
+    },
+    #[snafu(display("Device `{name}` already activated"))]
+    DeviceAlreadyActivatedError { name: String, backtrace: Backtrace },
+    #[snafu(display("Device with uuid `{uuid}` is already formatted"))]
+    DeviceAlreadyFormattedError { uuid: Uuid, backtrace: Backtrace },
+    #[snafu(display("Not all disks have been formatted for this operation"))]
+    NotAllDisksAlreadyFormattedError { backtrace: Backtrace },
+    #[snafu(display("Disk uuid duplicates found"))]
+    DiskIdDuplicatesFoundError { backtrace: Backtrace },
+    #[snafu(display("Disk entry already exists for uuid `{uuid}`"))]
+    EntryAlreadyExists { uuid: Uuid, backtrace: Backtrace },
+    #[snafu(display("Disk entry not found for uuid `{uuid}`"))]
+    DiskEntryNotFound { uuid: Uuid, backtrace: Backtrace },
+    #[snafu(display("Device error"))]
+    DeviceError {
+        #[snafu(backtrace)]
+        source: DeviceError,
+    },
+    #[snafu(display("The selected feature is not available"))]
+    FeatureNotAvailableError { backtrace: Backtrace },
+    #[snafu(display("Key input error"))]
+    KeyInputError {
+        #[snafu(backtrace)]
+        source: InputError,
+    },
+    #[snafu(display("The volume `{volume_id}` was not found on the current system"))]
+    VolumeNotFoundError { volume_id: VolumeId, backtrace: Backtrace },
 }
 
 pub trait Context {
@@ -74,7 +76,7 @@ pub struct DiskEnrolmentParams {
     pub entry: EntryParams,
     pub format: bool,
     pub force_format: bool,
-    pub format_params: crate::device::FormatContainerParams,
+    pub format_params: FormatContainerParams,
     pub iteration_ms: u32, // TODO: try to remove this from here
 }
 
@@ -85,11 +87,11 @@ pub trait PeroxideDbOps {
 
 impl<C: Context> PeroxideDbOps for C {
     fn open_db(&self) -> Result<PeroxideDb> {
-        PeroxideDb::open_at(self.db_location()).map_err(From::from)
+        PeroxideDb::open_at(self.db_location()).context(DatabaseSnafu)
     }
 
     fn save_db(&self, db: &PeroxideDb) -> Result<()> {
-        db.save_to(self.db_location()).map_err(From::from)
+        db.save_to(self.db_location()).context(DatabaseSnafu)
     }
 }
 
@@ -128,7 +130,7 @@ fn format_container<P: AsRef<Path>>(
         }
     };
 
-    match disk_path.luks_format_with_key(key, params)? {
+    match disk_path.luks_format_with_key(key, params).context(DeviceSnafu)? {
         FormatResult::Luks1 { keyslot } => Ok(keyslot),
         FormatResult::Luks2 { keyslot, token_id } => {
             entry.volume_id_mut().luks2_token_id = token_id;
@@ -143,7 +145,7 @@ fn prompt_old_key<Ctx: DeviceOps, BCtx: DeviceOps>(
     volume_id: &VolumeId,
 ) -> Result<SecStr> {
     if let Some(bc) = backup_db {
-        bc.prompt_key(volume_id.uuid()).map_err(From::from)
+        bc.prompt_key(volume_id.uuid()).context(KeyInputSnafu)
     } else {
         let passphrase_entry = DbEntry::PassphraseEntry {
             volume_id: volume_id.clone(),
@@ -223,7 +225,8 @@ impl DeviceOps for MainContext {
             name_override.clone(),
             None,
             false,
-        )?;
+        )
+        .context(KeyInputSnafu)?;
         self.activate_with_key(entry, &key, name_override, path_override)
     }
 
@@ -239,7 +242,7 @@ impl DeviceOps for MainContext {
             .unwrap_or_else(|| format!("uuid_{}", entry.volume_id().uuid()));
 
         if Disks::is_device_active(name.as_str()) {
-            return Err(Error::DeviceAlreadyActivated(name));
+            return Err(DeviceAlreadyActivatedSnafu { name }.build());
         }
 
         let default_path = Disks::disk_uuid_path(entry.volume_id().uuid()).ok();
@@ -253,9 +256,12 @@ impl DeviceOps for MainContext {
             device_path
                 .luks_activate(name.as_str(), key)
                 .map(move |_| name)
-                .map_err(From::from)
+                .context(DeviceSnafu)
         } else {
-            Err(Error::VolumeNotFound(entry.volume_id().clone()))
+            Err(VolumeNotFoundSnafu {
+                volume_id: entry.volume_id().clone(),
+            }
+            .build())
         }
     }
 
@@ -268,7 +274,7 @@ impl DeviceOps for MainContext {
             prompt_override,
             is_new,
         )
-        .map_err(From::from)
+        .context(KeyInputSnafu {})
     }
 
     fn enroll_disk<P: AsRef<Path>, BCtx: DeviceOps>(
@@ -300,10 +306,10 @@ impl DeviceOps for MainContext {
             if let Some(uuid) = uuid_opt {
                 if db.entry_exists(uuid) {
                     // validate: entry cannot exist twice
-                    return Err(Error::EntryAlreadyExists(uuid.clone()));
+                    return Err(EntryAlreadyExistsSnafu { uuid: uuid.clone() }.build());
                 } else if params.format && !params.force_format {
                     // validate: container should not be already formatted
-                    return Err(Error::DeviceAlreadyFormatted(uuid.clone()));
+                    return Err(DeviceAlreadyFormattedSnafu { uuid: uuid.clone() }.build());
                 }
                 count_formatted += 1;
             }
@@ -311,7 +317,7 @@ impl DeviceOps for MainContext {
 
         if !params.format && count_formatted != path_count {
             // validate: all containers should be formatted
-            return Err(Error::NotAllDisksAlreadyFormatted);
+            return Err(NotAllDisksAlreadyFormattedSnafu.build());
         }
 
         let paths_with_volume_ids = paths_with_existing_uuids.mapped(|(p, uuid_opt)| {
@@ -330,7 +336,7 @@ impl DeviceOps for MainContext {
             volume_ids.dedup();
 
             if path_count > volume_ids.len() {
-                return Err(Error::DiskIdDuplicatesFound);
+                return Err(DiskIdDuplicatesFoundSnafu.build());
             }
         }
 
@@ -356,7 +362,7 @@ impl DeviceOps for MainContext {
             entries_with_path.try_mapped_ref(|(disk_path, _)| {
                 (*disk_path)
                     .luks_add_key(params.iteration_ms as usize, &new_key, &prev_key, &params.format_params)
-                    .map_err::<Error, _>(From::from)
+                    .context(DeviceSnafu)
             })?
         };
 
@@ -373,7 +379,9 @@ impl DeviceOps for MainContext {
         paths: Vec1<P>,
         name_override: Option<String>,
     ) -> Result<Vec1<DeviceMapperName>> {
-        let paths_with_uuid = paths.try_mapped(|p| p.luks_uuid().map(|uuid| (p, uuid)))?;
+        let paths_with_uuid = paths
+            .try_mapped(|p| p.luks_uuid().map(|uuid| (p, uuid)))
+            .context(DeviceSnafu)?;
         let uuids = {
             let mut uuids = paths_with_uuid.mapped_ref(|pu| pu.1.to_owned());
             uuids.sort();
@@ -382,12 +390,12 @@ impl DeviceOps for MainContext {
         };
 
         if uuids.len() != paths_with_uuid.len() {
-            return Err(Error::DiskIdDuplicatesFound);
+            return Err(DiskIdDuplicatesFoundSnafu.build());
         }
 
         let paths_with_disk_entries = paths_with_uuid.try_mapped(|pu| match db.find_entry(&pu.1) {
             Some(entry) => Ok((pu.0, entry)),
-            None => Err(Error::DiskEntryNotFound(pu.1.clone())),
+            None => Err(DiskEntryNotFoundSnafu { uuid: pu.1.clone() }.build()),
         })?;
 
         if paths_with_disk_entries.len() == 1 {

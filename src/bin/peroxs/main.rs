@@ -14,6 +14,7 @@ use std::str::FromStr;
 use clap::{Parser, ValueHint};
 use clap_derive::Parser;
 use log::Level;
+use snafu::ErrorCompat;
 
 use operation::{PathOrUuid, Result};
 use peroxide_cryptsetup::context::{DiskEnrolmentParams, EntryParams, FormatContainerParams, MainContext};
@@ -395,6 +396,9 @@ fn run_peroxs() -> i32 {
         Ok(_) => 0,
         Err(e) => {
             println!("ERROR: {}", e);
+            if let Some(bt) = ErrorCompat::backtrace(&e) {
+                eprintln!("{}", bt)
+            }
             1
         }
     }
