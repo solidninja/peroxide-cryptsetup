@@ -1,4 +1,5 @@
 use std::convert;
+use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
 use std::result;
@@ -68,6 +69,10 @@ impl fmt::Display for OperationError {
             OperationError::ValidationFailed(ref cause) => write!(fmt, "Validation failed during operation: {}", cause),
         }
     }
+}
+
+impl Error for OperationError {
+    // todo: improve this
 }
 
 impl convert::From<ContextError> for OperationError {

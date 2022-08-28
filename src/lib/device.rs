@@ -63,7 +63,7 @@ pub enum FormatContainerParams {
         cipher_mode: String,
         hash: String,
         mk_bits: usize,
-        uuid: Option<uuid::Uuid>,
+        uuid: Option<Uuid>,
     },
     Luks2 {
         cipher: String,
@@ -77,7 +77,7 @@ pub enum FormatContainerParams {
         sector_size: Option<u32>,
         data_alignment: Option<u32>,
         save_label_in_header: bool,
-        uuid: Option<uuid::Uuid>,
+        uuid: Option<Uuid>,
         label: Option<String>,
         token_id: Option<Luks2TokenId>,
     },
@@ -281,7 +281,7 @@ impl Disks {
 
     /// Convert a UUID into a path under `/dev/disk/by-uuid/` if the disk with that UUID exists
     pub fn disk_uuid_path(uuid: &Uuid) -> Result<PathBuf> {
-        let path = Path::new(DISK_BY_UUID).join(uuid.to_hyphenated().to_string());
+        let path = Path::new(DISK_BY_UUID).join(uuid.hyphenated().to_string());
 
         fs::symlink_metadata(&path)
             .and_then(|meta| {

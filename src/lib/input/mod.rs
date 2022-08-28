@@ -1,5 +1,5 @@
 use std::error;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::result;
@@ -16,7 +16,6 @@ use pinentry_rs::Error as PinEntryError;
 
 use crate::context::{DatabaseOps, DeviceOps};
 use crate::db::{DbEntry, PeroxideDb, YubikeyEntryType, YubikeySlot};
-use serde::export::Formatter;
 
 #[derive(Debug)]
 pub enum Error {

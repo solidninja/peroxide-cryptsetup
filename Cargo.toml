@@ -7,11 +7,11 @@ keywords = ["cli", "cryptsetup", "luks"]
 license = "GPL-3.0"
 name = "peroxide-cryptsetup"
 readme = "README.md"
-version = "0.3.0-alpha.1"
-edition = "2018"
+version = "0.3.0-alpha.3"
+edition = "2021"
 
 [badges]
-gitlab = { repository = "solidninja/peroxide-cryptsetup", branch = "staging" }
+gitlab = { repository = "solidninja/peroxide-cryptsetup" }
 
 [[bin]]
 doc = false
@@ -19,39 +19,41 @@ name = "peroxs"
 test = false
 
 [dependencies]
-clap = "3.0.0-beta.2"
+clap = "3.2.17"
+clap_derive = "3.2.17"
 cryptsetup-rs = { version = "0.3.0-beta3", path = "../cryptsetup-rs" }
-env_logger = "0.7.1"
-errno = "0.2.5"
-libc = "0.2.71"
-log = "0.4.8"
-prettytable-rs = "0.8.0"
-secstr = "0.4.0"
-serde = "1.0.111"
-serde_derive = "1.0.111"
-serde_json = "1.0.53"
+env_logger = "0.9.0"
+errno = "0.2.8"
+libc = "0.2.132"
+log = "0.4.17"
+prettytable-rs = "0.9.0"
+secstr = "0.5.0"
+serde = "1.0.144"
+serde_derive = "1.0.144"
+serde_json = "1.0.85"
 vec1 = "1.6.0"
 
 [dependencies.sodiumoxide]
 optional = true
-version = "0.2.5"
+version = "0.2.7"
 
 [dependencies.ttypass]
 path = "lib/ttypass"
-version = "0.1.1"
+version = "0.3.0-alpha.3"
 
 [dependencies.uuid]
 features = ["serde", "v4"]
-version = "0.8.1"
+version = "1.1.2"
 
 [dependencies.ykpers-rs]
 optional = true
 path = "lib/ykpers-rs"
-version = "0.2.0-beta1"
+version = "0.3.0-alpha.3"
 
 [dependencies.pinentry-rs]
 optional = true
-version = "0.1.2"
+path = "../pinentry-rs"
+version = "0.2.0"
 
 [dev-dependencies]
 expectest = "0.12.0"

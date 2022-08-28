@@ -1,11 +1,11 @@
 [package]
 name = "libykpers-sys"
-version = "0.2.0-beta1"
+version = "0.3.0-alpha.3"
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
 description = "FFI bindings to libykpers"
 license = "LGPL-3.0"
 homepage = "https://gitlab.com/solidninja/peroxide-cryptsetup"
-edition = "2018"
+edition = "2021"
 
 links = "ykpers-1"
 build = "build.rs"
@@ -14,7 +14,7 @@ build = "build.rs"
 name = "libykpers_sys"
 
 [dependencies]
-libc = "0.2.71"
+libc = "0.2.104"
 
 [build-dependencies]
-pkg-config = "0.3.17"
+pkg-config = "0.3.21"

@@ -1,12 +1,12 @@
 [package]
 name = "ttypass"
-version = "0.1.1"
+version = "0.3.0-alpha.3"
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
 license = "LGPL-3.0"
 description = "Tiny library to read passwords from terminal windows"
 homepage = "https://gitlab.com/solidninja/peroxide-cryptsetup"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-libc = "0.2.71"
+libc = "0.2.104"
 termios = "0.3.2"

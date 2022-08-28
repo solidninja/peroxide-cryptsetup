@@ -1,21 +1,16 @@
 #![deny(warnings)]
 #![deny(bare_trait_objects)]
 #[warn(unused_must_use)]
-extern crate clap;
-extern crate env_logger;
-extern crate errno;
 #[macro_use]
 extern crate log;
-extern crate peroxide_cryptsetup;
 #[macro_use]
 extern crate prettytable;
-extern crate serde_derive;
-extern crate uuid;
 
 use std::path::PathBuf;
 use std::process::exit;
 
-use clap::{AppSettings, Clap, ValueHint};
+use clap::{Parser, ValueHint};
+use clap_derive::Parser;
 use log::Level;
 
 use operation::{PathOrUuid, Result};
@@ -24,11 +19,8 @@ use peroxide_cryptsetup::db::{DbEntryType, DbType, YubikeyEntryType};
 
 mod operation;
 
-#[derive(Clap, Debug)]
-#[clap(author, about, version,
-global_setting = AppSettings::ColoredHelp,
-global_setting = AppSettings::VersionlessSubcommands,
-max_term_width=120)]
+#[derive(Parser, Debug)]
+#[clap(author, about, version, max_term_width = 120)]
 struct Opts {
     #[clap(subcommand)]
     subcmd: TopSubcommand,
@@ -36,13 +28,13 @@ struct Opts {
     global: GlobalOpts,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct GlobalOpts {
-    #[clap(short, long, visible_aliases = &["db"], about = "The database to use", default_value = "peroxs-db.json", value_hint = ValueHint::FilePath, global=true)]
+    #[clap(short, long, visible_aliases = &["db"], long_help = "The database to use", default_value = "peroxs-db.json", value_hint = ValueHint::FilePath, global=true)]
     database: PathBuf,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 enum TopSubcommand {
     #[clap(about = "Enroll a new or existing LUKS disk(s) in the database (adding a new keyslot)")]
     Enroll(EnrollCommand),
@@ -56,13 +48,13 @@ enum TopSubcommand {
     Register(RegisterCommand),
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct EnrollCommand {
     #[clap(subcommand)]
     subcmd: EnrollSubcommand,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 enum EnrollSubcommand {
     #[clap(about = "Enroll using a keyfile")]
     Keyfile(EnrollKeyfile),
@@ -73,66 +65,66 @@ enum EnrollSubcommand {
     Yubikey(EnrollYubikey),
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct LuksFormatParams {
-    #[clap(long, visible_alias = "new", about = "Format the LUKS container")]
+    #[clap(long, visible_alias = "new", long_help = "Format the LUKS container")]
     format: bool,
     #[clap(
         long,
         visible_alias = "force",
-        about = "Force format the LUKS container",
+        long_help = "Force format the LUKS container",
         requires = "format"
     )]
     force_format: bool,
-    #[clap(short='1', long, about = "Use LUKS version 1", groups=&["luks-version"])]
+    #[clap(short='1', long, long_help ="Use LUKS version 1", groups=&["luks-version"])]
     luks1: bool,
-    #[clap(short='2', long, about = "Use LUKS version 2 (default)", groups=&["luks-version"])]
+    #[clap(short='2', long, long_help ="Use LUKS version 2 (default)", groups=&["luks-version"])]
     _luks2: bool, // todo: remove
     #[clap(
         short = 'i',
         long,
-        about = "Number of milliseconds to wait for the PBKDF2 function iterations",
+        long_help = "Number of milliseconds to wait for the PBKDF2 function iterations",
         default_value = "1000"
     )]
     iteration_ms: u32,
     #[clap(
         short = 's',
         long,
-        about = "Number of key bits to use for new LUKS container",
+        long_help = "Number of key bits to use for new LUKS container",
         default_value = "512"
     )]
     key_bits: usize,
     #[clap(
         short = 'c',
         long,
-        about = "Cipher to use for new LUKS container",
+        long_help = "Cipher to use for new LUKS container",
         default_value = "aes-xts-plain"
     )]
     cipher: String,
     #[clap(
         short = 'h',
         long,
-        about = "Hash function to use for new LUKS container",
+        long_help = "Hash function to use for new LUKS container",
         default_value = "sha256"
     )]
     hash: String,
     #[clap(
         long,
-        about = "Number of iterations for argon2",
+        long_help = "Number of iterations for argon2",
         default_value = "1000000",
         conflicts_with = "luks1"
     )]
     argon2_iterations: u32,
     #[clap(
         long,
-        about = "Number of parallel threads for argon2",
+        long_help = "Number of parallel threads for argon2",
         default_value = "4",
         conflicts_with = "luks1"
     )]
     argon2_parallel_threads: u32,
     #[clap(
         long,
-        about = "Memory to use for argon2",
+        long_help = "Memory to use for argon2",
         default_value = "512000",
         conflicts_with = "luks1"
     )]
@@ -140,85 +132,85 @@ struct LuksFormatParams {
     #[clap(
         long,
         visible_alias = "save-label",
-        about = "Save the name provide in the LUKS header",
+        long_help = "Save the name provide in the LUKS header",
         conflicts_with = "luks1",
         requires = "format"
     )]
     save_label_in_header: bool,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct EnrollCommon {
-    #[clap(about = "The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
+    #[clap(long_help ="The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
     device_or_uuid: Vec<PathOrUuid>,
     #[clap(flatten)]
     format_params: LuksFormatParams,
-    #[clap(short, long, about = "The name of the device in the database")]
+    #[clap(short, long, long_help = "The name of the device in the database")]
     name: Option<String>,
-    #[clap(long, about = "Path to another database that can be used to unlock the device", value_hint = ValueHint::FilePath, conflicts_with = "format")]
+    #[clap(long, long_help ="Path to another database that can be used to unlock the device", value_hint = ValueHint::FilePath, conflicts_with = "format")]
     backup_db: Option<PathBuf>,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct EnrollKeyfile {
-    #[clap(about = "An existing key file with randomness inside", value_hint = ValueHint::FilePath)]
+    #[clap(long_help ="An existing key file with randomness inside", value_hint = ValueHint::FilePath)]
     keyfile: PathBuf,
     #[clap(flatten)]
     common: EnrollCommon,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct EnrollPassphrase {
     #[clap(flatten)]
     common: EnrollCommon,
 }
 
 #[cfg(feature = "yubikey")]
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct EnrollYubikey {
     #[cfg(feature = "yubikey_hybrid")]
-    #[clap(long, about = "Use the yubikey-hybrid key derivation mechanism")]
+    #[clap(long, long_help = "Use the yubikey-hybrid key derivation mechanism")]
     hybrid: bool,
-    #[clap(short='S', long, about = "Slot in yubikey to use", possible_values=&["1", "2"])]
+    #[clap(short='S', long, long_help ="Slot in yubikey to use", possible_values=&["1", "2"])]
     slot: u8,
     #[clap(flatten)]
     common: EnrollCommon,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct InitCommand {
-    #[clap(about = "Database type to enroll", possible_values = &["operation", "backup"])]
+    #[clap(long_help ="Database type to enroll", possible_values = &["operation", "backup"])]
     db_type: DbType,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct ListCommand {
     #[clap(
         long,
-        about = "List all devices in database, regardless of whether they can be found to be attached to the system currently"
+        long_help = "List all devices in database, regardless of whether they can be found to be attached to the system currently"
     )]
     all: bool,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct OpenCommand {
     #[clap(
         short,
         long,
-        about = "Override name specified in database (if any) when activating the device"
+        long_help = "Override name specified in database (if any) when activating the device"
     )]
     name: Option<String>,
-    #[clap(about = "The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
+    #[clap(long_help ="The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
     device_or_uuid: Vec<PathOrUuid>,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct RegisterCommand {
     #[clap(subcommand)]
     subcmd: RegisterSubcommand,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 enum RegisterSubcommand {
     #[clap(about = "Register an existing keyfile")]
     Keyfile(RegisterKeyfile),
@@ -226,23 +218,23 @@ enum RegisterSubcommand {
     Passphrase(RegisterPassphrase),
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct RegisterCommon {
-    #[clap(about = "The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
+    #[clap(long_help ="The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
     device_or_uuid: Vec<PathOrUuid>,
-    #[clap(short, long, about = "The name of the device in the database")]
+    #[clap(short, long, long_help = "The name of the device in the database")]
     name: Option<String>,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct RegisterKeyfile {
-    #[clap(about = "Path to an existing keyfile", value_hint = ValueHint::FilePath)]
+    #[clap(long_help ="Path to an existing keyfile", value_hint = ValueHint::FilePath)]
     keyfile: PathBuf,
     #[clap(flatten)]
     common: RegisterCommon,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct RegisterPassphrase {
     #[clap(flatten)]
     common: RegisterCommon,
