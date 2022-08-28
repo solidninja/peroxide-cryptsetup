@@ -7,8 +7,9 @@ keywords = ["cli", "cryptsetup", "luks"]
 license = "GPL-3.0"
 name = "peroxide-cryptsetup"
 readme = "README.md"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
+rust-version = "1.60"
 
 [badges]
 gitlab = { repository = "solidninja/peroxide-cryptsetup" }
@@ -30,19 +31,13 @@ secstr = "0.5.0"
 serde = "1.0.144"
 serde_derive = "1.0.144"
 serde_json = "1.0.85"
+sodiumoxide = { version = "0.2.7", optional = true }
+uuid = { version = "1.1.2", features = ["serde", "v4"] }
 vec1 = "1.6.0"
-
-[dependencies.sodiumoxide]
-optional = true
-version = "0.2.7"
 
 [dependencies.ttypass]
 path = "lib/ttypass"
 version = "0.3.1"
-
-[dependencies.uuid]
-features = ["serde", "v4"]
-version = "1.1.2"
 
 [dependencies.ykpers-rs]
 optional = true
@@ -50,8 +45,8 @@ path = "lib/ykpers-rs"
 version = "0.3.1"
 
 [dependencies.cryptsetup-rs]
-# path = "./cryptsetup-rs"
-version = "0.3.0"
+# path = "../cryptsetup-rs"
+version = "0.3.2"
 
 [dependencies.pinentry-rs]
 optional = true
@@ -64,9 +59,9 @@ tempfile = "3.1.0"
 
 [features]
 default = ["pinentry", "yubikey", "yubikey_hybrid"]
-yubikey = ["ykpers-rs"]
-yubikey_hybrid = ["yubikey", "sodiumoxide"]
-pinentry = ["pinentry-rs"]
+yubikey = ["dep:ykpers-rs"]
+yubikey_hybrid = ["yubikey", "dep:sodiumoxide"]
+pinentry = ["dep:pinentry-rs"]
 
 [lib]
 name = "peroxide_cryptsetup"

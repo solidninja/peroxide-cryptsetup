@@ -2,12 +2,13 @@ use std::convert::From;
 use std::fs;
 use std::io;
 use std::io::ErrorKind;
+use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::result;
 
 use cryptsetup_rs;
 pub use cryptsetup_rs::Keyslot;
-use cryptsetup_rs::{CryptDevice, Luks2CryptDevice, Luks2Token, Luks2TokenId, LuksCryptDevice};
+use cryptsetup_rs::{luks_uuid, CryptDevice, Luks2CryptDevice, Luks2Token, Luks2TokenId, LuksCryptDevice};
 
 use cryptsetup_rs::api::crypt_pbkdf_algo_type;
 use errno;
@@ -47,8 +48,9 @@ impl From<io::Error> for Error {
 
 // this assumes a udev-like /dev layout
 const DISK_BY_UUID: &'static str = "/dev/disk/by-uuid";
-const DEV_MAPPER: &'static str = "/dev/mapper";
 const TOKEN_NAME: &'static str = "peroxide";
+const SYSFS_VIRTUAL_BLOCK_DIR: &'static str = "/sys/devices/virtual/block";
+const DEVFS_BLOCK_DIR: &'static str = "/dev/block";
 
 const UUID_LENGTH: usize = 36;
 
@@ -253,6 +255,19 @@ impl<P: AsRef<Path>> LuksVolumeOps for P {
     }
 }
 
+/// Information gathered about mapped disks from sysfs
+#[derive(Debug)]
+pub struct DmSetupDeviceInfo {
+    /// dm-N name of the device
+    pub dm_name: String,
+    /// Mapped name of the device
+    pub name: String,
+    /// Underlying block path
+    pub underlying: PathBuf,
+    /// LUKS UUID
+    pub underlying_uuid: Uuid,
+}
+
 pub struct Disks;
 
 impl Disks {
@@ -299,9 +314,54 @@ impl Disks {
     }
 
     /// Test whether a device name is in use already (i.e. it is actively mapped)
-    pub fn is_device_mapped(name: &str) -> bool {
-        let path = Path::new(DEV_MAPPER).join(name);
-        fs::metadata(&path).map(|meta| !meta.is_dir()).unwrap_or(false)
+    pub fn is_device_active(name: &str) -> bool {
+        debug!("checking device active {}", name);
+        match cryptsetup_rs::api::status(name) {
+            cryptsetup_rs::api::crypt_status_info::CRYPT_ACTIVE => true,
+            cryptsetup_rs::api::crypt_status_info::CRYPT_BUSY => true,
+            _ => false,
+        }
+    }
+
+    // todo: consider adding this to the context + higher-level convenience methods
+    /// Scan sysfs for active devices and return a list of found devices
+    pub fn scan_sysfs_for_active_crypt_devices() -> Result<Vec<DmSetupDeviceInfo>> {
+        let dm_paths = fs::read_dir(SYSFS_VIRTUAL_BLOCK_DIR)?
+            .into_iter()
+            .filter_map(|res| res.ok())
+            .filter(|e| e.path().is_dir() && e.path().file_name().map_or(false, |c| c.as_bytes().starts_with(b"dm-")))
+            .map(|e| e.path())
+            .collect::<Vec<_>>();
+
+        let mut res = vec![];
+        for path in dm_paths {
+            let name = fs::read_to_string(path.join("dm/name"))?;
+            let slave_dirs = fs::read_dir(path.join("slaves"))?
+                .into_iter()
+                .filter_map(|res| res.ok())
+                .filter(|e| e.path().is_symlink())
+                .filter_map(|e| e.path().canonicalize().ok())
+                .collect::<Vec<_>>();
+
+            if slave_dirs.len() == 1 {
+                let dev_name = fs::read_to_string(slave_dirs.get(0).unwrap().join("dev"))?;
+                let dev_path = PathBuf::from(DEVFS_BLOCK_DIR)
+                    .join(dev_name.trim_end())
+                    .canonicalize()?;
+                let luks_uuid = luks_uuid(&dev_path)?;
+
+                res.push(DmSetupDeviceInfo {
+                    dm_name: path.file_name().unwrap().to_string_lossy().to_string(),
+                    name: name.trim_end().to_string(),
+                    underlying: dev_path,
+                    underlying_uuid: luks_uuid,
+                })
+            }
+        }
+
+        debug!("found sysfs mappings: {:?}", res);
+
+        Ok(res)
     }
 
     // FAT32/NTFS disks do not have a UUID of the proper length - exclude them as they cannot be

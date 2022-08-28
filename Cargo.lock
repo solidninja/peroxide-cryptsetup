@@ -151,9 +151,9 @@ dependencies = [
 
 [[package]]
 name = "cryptsetup-rs"
-version = "0.3.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcf21c99aa6665f554ddc980627bacc9c417f64684f6ad9be38c167846765fbc"
+checksum = "8509f39d608ff84145fc6926f90b5a49b6d67fd11d76fbefd7041fa8f1dc6fc1"
 dependencies = [
  "base64",
  "base64-serde",
