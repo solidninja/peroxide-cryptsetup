@@ -33,7 +33,7 @@ serde_derive = "1.0.144"
 serde_json = "1.0.85"
 sodiumoxide = { version = "0.2.7", optional = true }
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
-vec1 = "1.6.0"
+vec1 = "1.8.0"
 
 [dependencies.ttypass]
 path = "lib/ttypass"
@@ -55,7 +55,7 @@ version = "0.2.0"
 
 [dev-dependencies]
 expectest = "0.12.0"
-tempfile = "3.1.0"
+tempfile = "3.3.0"
 
 [features]
 default = ["pinentry", "yubikey", "yubikey_hybrid"]

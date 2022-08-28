@@ -16,6 +16,8 @@ pub struct Params {
 pub fn open<C: Context + DeviceOps>(ctx: &C, params: Params) -> Result<()> {
     let db = ctx.open_db()?;
 
+    // TODO: check for existing mapping
+
     let paths = params
         .disk_references
         .into_iter()
