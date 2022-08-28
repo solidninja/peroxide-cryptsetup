@@ -87,7 +87,7 @@ struct LuksFormatParams {
     #[clap(short='1', long, about = "Use LUKS version 1", groups=&["luks-version"])]
     luks1: bool,
     #[clap(short='2', long, about = "Use LUKS version 2 (default)", groups=&["luks-version"])]
-    luks2: bool,
+    _luks2: bool, // todo: remove
     #[clap(
         short = 'i',
         long,
