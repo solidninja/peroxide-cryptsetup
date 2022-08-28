@@ -107,10 +107,6 @@ Options:
     -S <slot>, --slot <slot>                Slot in Yubikey to use
 ```
 
-## Roadmap
-
-There's no official roadmap, but have a look in [TASKS.todo](TASKS.todo) for a list of current tasks.
-
 ## Development
 
 You will require the following packages installed:
