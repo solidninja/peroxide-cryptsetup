@@ -45,29 +45,34 @@ mod tests {
     use std::str;
 
     use expectest::prelude::*;
+    use snafu::prelude::*;
     use tempfile::{Builder, TempDir};
+
+    use crate::input::IoSnafu;
 
     use super::*;
 
     fn _write_keyfile(s: &str) -> Result<(TempDir, PathBuf)> {
-        let tmp_dir = Builder::new().prefix("keyfile_prompt").tempdir()?;
+        let tmp_dir = Builder::new().prefix("keyfile_prompt").tempdir().context(IoSnafu)?;
         let keyfile = tmp_dir.path().join("keyfile");
 
-        let mut tmp_file = File::create(&keyfile)?;
-        write!(tmp_file, "{}", s)?;
+        let mut tmp_file = File::create(&keyfile).context(IoSnafu)?;
+        write!(tmp_file, "{}", s).context(IoSnafu)?;
         drop(tmp_file);
 
         Ok((tmp_dir, keyfile))
     }
 
     #[test]
-    fn read_key_from_file() {
-        let (_tmp_dir, key_file) = _write_keyfile("correcthorsebatterystaple").unwrap();
+    fn read_key_from_file() -> Result<()> {
+        let (_tmp_dir, key_file) = _write_keyfile("correcthorsebatterystaple")?;
 
         let prompt = KeyfilePrompt { key_file };
-        let key = prompt.get_key(&InputName::blank(), false).unwrap();
-        let key_str = str::from_utf8(key.unsecure()).unwrap();
+        let key = prompt.get_key(&InputName::blank(), false)?;
+        let key_str = str::from_utf8(key.unsecure()).expect("unsecure key to utf8");
 
         expect!(key_str).to(be_equal_to("correcthorsebatterystaple"));
+
+        Ok(())
     }
 }

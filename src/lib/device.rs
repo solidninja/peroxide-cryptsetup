@@ -334,6 +334,10 @@ impl Disks {
     // todo: consider adding this to the context + higher-level convenience methods
     /// Scan sysfs for active devices and return a list of found devices
     pub fn scan_sysfs_for_active_crypt_devices() -> Result<Vec<DmSetupDeviceInfo>> {
+        if !PathBuf::from(SYSFS_VIRTUAL_BLOCK_DIR).is_dir() {
+            return Ok(vec![]);
+        }
+
         let dm_paths = fs::read_dir(SYSFS_VIRTUAL_BLOCK_DIR)
             .context(IoSnafu)?
             .into_iter()
@@ -354,19 +358,21 @@ impl Disks {
                 .collect::<Vec<_>>();
 
             if slave_dirs.len() == 1 {
-                let dev_name = fs::read_to_string(slave_dirs.get(0).unwrap().join("dev")).context(IoSnafu)?; // FIXME
+                let dev_name = fs::read_to_string(slave_dirs.get(0).unwrap().join("dev")).context(IoSnafu)?;
                 let dev_path = PathBuf::from(DEVFS_BLOCK_DIR)
                     .join(dev_name.trim_end())
                     .canonicalize()
                     .context(IoSnafu)?;
-                let luks_uuid = luks_uuid(&dev_path)?;
 
-                res.push(DmSetupDeviceInfo {
-                    dm_name: path.file_name().unwrap().to_string_lossy().to_string(),
-                    name: name.trim_end().to_string(),
-                    underlying: dev_path,
-                    underlying_uuid: luks_uuid,
-                })
+                // if we fail to read the luks uuid - either we don't have permission or it's not a luks disk, so don't add to list
+                if let Ok(uuid) = luks_uuid(&dev_path) {
+                    res.push(DmSetupDeviceInfo {
+                        dm_name: path.file_name().unwrap().to_string_lossy().to_string(),
+                        name: name.trim_end().to_string(),
+                        underlying: dev_path,
+                        underlying_uuid: uuid,
+                    })
+                }
             }
         }
 
@@ -394,5 +400,11 @@ mod tests {
     fn test_all_disks_uuids_must_return_something() {
         let maybe_uuids = Disks::all_disk_uuids();
         expect!(maybe_uuids).to(be_ok());
+    }
+
+    #[test]
+    fn test_scan_sysfs_for_active_crypt_devices_must_be_ok() {
+        let maybe_devices = Disks::scan_sysfs_for_active_crypt_devices();
+        expect!(maybe_devices).to(be_ok());
     }
 }
