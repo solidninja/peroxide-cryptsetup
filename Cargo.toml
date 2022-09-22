@@ -1,15 +1,36 @@
-[package]
+[workspace]
+members = [
+    "lib/ttypass",
+    "lib/ykpers-rs",
+    "lib/ykpers-rs/libykpers-sys",
+]
+default-members = [
+    "lib/ttypass",
+    "lib/ykpers-rs",
+    "lib/ykpers-rs/libykpers-sys"
+]
+
+[workspace.package]
 authors = ["Vladimir Lushnikov <vladimir@solidninja.is>"]
-description = "Command-line utility for managing LUKS encrypted volumes using 2FA methods (for example Yubikeys)"
+edition = "2021"
 homepage = "https://gitlab.com/solidninja/peroxide-cryptsetup"
 repository = "https://gitlab.com/solidninja/peroxide-cryptsetup"
+rust-version = "1.64"
+version = "0.3.2"
+
+[package]
+description = "Command-line utility for managing LUKS encrypted volumes using 2FA methods (for example Yubikeys)"
 keywords = ["cli", "cryptsetup", "luks"]
 license = "GPL-3.0"
 name = "peroxide-cryptsetup"
 readme = "README.md"
-version = "0.3.2"
-edition = "2021"
-rust-version = "1.60"
+
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [badges]
 gitlab = { repository = "solidninja/peroxide-cryptsetup" }
@@ -20,11 +41,9 @@ name = "peroxs"
 test = false
 
 [dependencies]
-clap = "3.2.17"
-clap_derive = "3.2.17"
+clap = { version = "4.0.0-rc.2", features = ["color", "derive"] }
 env_logger = "0.9.0"
 errno = "0.2.8"
-libc = "0.2.132"
 log = "0.4.17"
 prettytable-rs = "0.9.0"
 secstr = "0.5.0"
@@ -38,12 +57,12 @@ vec1 = "1.8.0"
 
 [dependencies.ttypass]
 path = "lib/ttypass"
-version = "0.3.1"
+version = "0.3.2"
 
 [dependencies.ykpers-rs]
 optional = true
 path = "lib/ykpers-rs"
-version = "0.3.1"
+version = "0.3.2"
 
 [dependencies.cryptsetup-rs]
 # path = "../cryptsetup-rs"
@@ -67,10 +86,3 @@ pinentry = ["dep:pinentry-rs"]
 [lib]
 name = "peroxide_cryptsetup"
 path = "src/lib/lib.rs"
-
-[workspace]
-members = [
-    "lib/ttypass",
-    "lib/ykpers-rs",
-    "lib/ykpers-rs/libykpers-sys",
-]

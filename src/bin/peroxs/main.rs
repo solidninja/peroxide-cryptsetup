@@ -11,8 +11,7 @@ use std::path::PathBuf;
 use std::process::exit;
 use std::str::FromStr;
 
-use clap::{Parser, ValueHint};
-use clap_derive::Parser;
+use clap::{value_parser, Args, Parser, Subcommand, ValueHint};
 use log::Level;
 use snafu::ErrorCompat;
 
@@ -23,116 +22,116 @@ use peroxide_cryptsetup::db::{DbEntryType, DbType, YubikeyEntryType};
 mod operation;
 
 #[derive(Parser, Debug)]
-#[clap(author, about, version, max_term_width = 120)]
+#[command(author, about, version, max_term_width = 120, disable_colored_help = false)]
 struct Opts {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     subcmd: TopSubcommand,
-    #[clap(flatten)]
+    #[command(flatten)]
     global: GlobalOpts,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct GlobalOpts {
-    #[clap(short, long, visible_aliases = &["db"], long_help = "The database to use", default_value = "peroxs-db.json", value_hint = ValueHint::FilePath, global=true)]
+    #[arg(short, long, visible_aliases = &["db"], long_help = "The database to use", default_value = "peroxs-db.json", value_hint = ValueHint::FilePath, global=true)]
     database: PathBuf,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Subcommand, Debug)]
 enum TopSubcommand {
-    #[clap(about = "Enroll a new or existing LUKS disk(s) in the database (adding a new keyslot)")]
+    #[command(about = "Enroll a new or existing LUKS disk(s) in the database (adding a new keyslot)")]
     Enroll(EnrollCommand),
-    #[clap(about = "Initialize a new peroxide-db database")]
+    #[command(about = "Initialize a new peroxide-db database")]
     Init(InitCommand),
-    #[clap(about = "List disks enrolled in a database")]
+    #[command(about = "List disks enrolled in a database")]
     List(ListCommand),
-    #[clap(about = "Open enrolled LUKS disk(s)")]
+    #[command(about = "Open enrolled LUKS disk(s)")]
     Open(OpenCommand),
-    #[clap(about = "Register an existing entry in the database (without adding a new keyslot)")]
+    #[command(about = "Register an existing entry in the database (without adding a new keyslot)")]
     Register(RegisterCommand),
 }
 
 #[derive(Parser, Debug)]
 struct EnrollCommand {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     subcmd: EnrollSubcommand,
 }
 
 #[derive(Parser, Debug)]
 enum EnrollSubcommand {
-    #[clap(about = "Enroll using a keyfile")]
+    #[command(about = "Enroll using a keyfile", disable_help_flag = true)]
     Keyfile(EnrollKeyfile),
-    #[clap(about = "Enroll using a passphrase")]
+    #[command(about = "Enroll using a passphrase", disable_help_flag = true)]
     Passphrase(EnrollPassphrase),
     #[cfg(feature = "yubikey")]
-    #[clap(about = "Enroll using a Yubikey token")]
+    #[command(about = "Enroll using a Yubikey token", disable_help_flag = true)]
     Yubikey(EnrollYubikey),
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct LuksFormatParams {
-    #[clap(long, visible_alias = "new", long_help = "Format the LUKS container")]
+    #[arg(long, visible_alias = "new", long_help = "Format the LUKS container")]
     format: bool,
-    #[clap(
+    #[arg(
         long,
         visible_alias = "force",
         long_help = "Force format the LUKS container",
         requires = "format"
     )]
     force_format: bool,
-    #[clap(short='1', long, long_help ="Use LUKS version 1", groups=&["luks-version"])]
+    #[arg(short='1', long, long_help ="Use LUKS version 1", groups=&["luks-version"])]
     luks1: bool,
-    #[clap(short='2', long, long_help ="Use LUKS version 2 (default)", groups=&["luks-version"])]
+    #[arg(short='2', long, long_help ="Use LUKS version 2 (default)", groups=&["luks-version"])]
     _luks2: bool, // todo: remove
-    #[clap(
+    #[arg(
         short = 'i',
         long,
         long_help = "Number of milliseconds to wait for the PBKDF2 function iterations",
         default_value = "1000"
     )]
     iteration_ms: u32,
-    #[clap(
+    #[arg(
         short = 's',
         long,
         long_help = "Number of key bits to use for new LUKS container",
         default_value = "512"
     )]
     key_bits: usize,
-    #[clap(
+    #[arg(
         short = 'c',
         long,
         long_help = "Cipher to use for new LUKS container",
         default_value = "aes-xts-plain"
     )]
     cipher: String,
-    #[clap(
+    #[arg(
         short = 'h',
         long,
         long_help = "Hash function to use for new LUKS container",
         default_value = "sha256"
     )]
     hash: String,
-    #[clap(
+    #[arg(
         long,
         long_help = "Number of iterations for argon2",
         default_value = "1000000",
         conflicts_with = "luks1"
     )]
     argon2_iterations: u32,
-    #[clap(
+    #[arg(
         long,
         long_help = "Number of parallel threads for argon2",
         default_value = "4",
         conflicts_with = "luks1"
     )]
     argon2_parallel_threads: u32,
-    #[clap(
+    #[arg(
         long,
         long_help = "Memory to use for argon2",
         default_value = "512000",
         conflicts_with = "luks1"
     )]
     argon2_memory_kb: u32,
-    #[clap(
+    #[arg(
         long,
         visible_alias = "save-label",
         long_help = "Save the name provide in the LUKS header",
@@ -142,108 +141,109 @@ struct LuksFormatParams {
     save_label_in_header: bool,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct EnrollCommon {
-    #[clap(long_help ="The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
+    #[arg(long_help ="The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
     device_or_uuid: Vec<PathOrUuid>,
-    #[clap(flatten)]
+    #[command(flatten)]
     format_params: LuksFormatParams,
-    #[clap(short, long, long_help = "The name of the device in the database")]
+    #[arg(short, long, long_help = "The name of the device in the database")]
     name: Option<String>,
-    #[clap(long, long_help ="Path to another database that can be used to unlock the device", value_hint = ValueHint::FilePath, conflicts_with = "format")]
+    #[arg(long, long_help ="Path to another database that can be used to unlock the device", value_hint = ValueHint::FilePath, conflicts_with = "format")]
     backup_db: Option<PathBuf>,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct EnrollKeyfile {
-    #[clap(long_help ="An existing key file with randomness inside", value_hint = ValueHint::FilePath)]
+    #[arg(long_help ="An existing key file with randomness inside", value_hint = ValueHint::FilePath)]
     keyfile: PathBuf,
-    #[clap(flatten)]
+    #[command(flatten)]
     common: EnrollCommon,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct EnrollPassphrase {
-    #[clap(flatten)]
+    #[command(flatten)]
     common: EnrollCommon,
 }
 
 #[cfg(feature = "yubikey")]
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct EnrollYubikey {
     #[cfg(feature = "yubikey_hybrid")]
-    #[clap(long, long_help = "Use the yubikey-hybrid key derivation mechanism")]
+    #[arg(long, long_help = "Use the yubikey-hybrid key derivation mechanism")]
     hybrid: bool,
-    #[clap(short='S', long, long_help ="Slot in yubikey to use", possible_values=&["1", "2"])]
+    #[arg(short='S', long, long_help ="Slot in yubikey to use", value_parser=value_parser!(u8).range(1..=2))]
+    // todo: show possible values
     slot: u8,
-    #[clap(flatten)]
+    #[command(flatten)]
     common: EnrollCommon,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct InitCommand {
-    #[clap(long_help ="Database type to enroll", possible_values = &["operation", "backup"])]
-    db_type: DbType,
+    #[arg(long_help = "Database type to enroll")]
+    db_type: DbType, // todo: show possible values
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct ListCommand {
-    #[clap(
+    #[arg(
         long,
         long_help = "List all devices in database, regardless of whether they can be found to be attached to the system currently"
     )]
     all: bool,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct OpenCommand {
-    #[clap(
+    #[arg(
         short,
         long,
         long_help = "Override name specified in database (if any) when activating the device"
     )]
     name: Option<String>,
-    #[clap(long_help ="The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
+    #[arg(long_help ="The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
     device_or_uuid: Vec<DiskReference>,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct RegisterCommand {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     subcmd: RegisterSubcommand,
 }
 
 #[derive(Parser, Debug)]
 enum RegisterSubcommand {
-    #[clap(about = "Register an existing keyfile")]
+    #[command(about = "Register an existing keyfile")]
     Keyfile(RegisterKeyfile),
-    #[clap(about = "Register an existing passphrase")]
+    #[command(about = "Register an existing passphrase")]
     Passphrase(RegisterPassphrase),
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct RegisterCommon {
-    #[clap(long_help ="The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
+    #[arg(long_help ="The path(s) to the device or the LUKS UUID(s) of the device", value_hint = ValueHint::FilePath)]
     device_or_uuid: Vec<PathOrUuid>,
-    #[clap(short, long, long_help = "The name of the device in the database")]
+    #[arg(short, long, long_help = "The name of the device in the database")]
     name: Option<String>,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct RegisterKeyfile {
-    #[clap(long_help ="Path to an existing keyfile", value_hint = ValueHint::FilePath)]
+    #[arg(long_help ="Path to an existing keyfile", value_hint = ValueHint::FilePath)]
     keyfile: PathBuf,
-    #[clap(flatten)]
+    #[command(flatten)]
     common: RegisterCommon,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Args, Debug)]
 struct RegisterPassphrase {
-    #[clap(flatten)]
+    #[command(flatten)]
     common: RegisterCommon,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiskReference(String);
 
 impl FromStr for DiskReference {

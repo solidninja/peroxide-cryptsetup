@@ -24,7 +24,7 @@ pub enum OperationError {
 
 pub type Result<T> = result::Result<T, OperationError>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PathOrUuid {
     Path(PathBuf),
     Uuid(uuid::Uuid),
